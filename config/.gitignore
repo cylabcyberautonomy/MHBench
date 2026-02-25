@@ -6,3 +6,5 @@
 !config_example.json
 # And Config prototype
 !config.py
+# And config_service.py
+!config_service.py
