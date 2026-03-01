@@ -3,6 +3,13 @@
   remote_user: root
 
   tasks:
+
+    - name: Switch http -> https in sources.list
+      replace:
+        path: /etc/apt/sources.list
+        regexp: 'http://'
+        replace: 'https://'
+
     - name: Add Kali Linux GPG key
       become: true
       get_url:
@@ -15,7 +22,7 @@
       copy:
         dest: /etc/apt/sources.list.d/kali.list
         content: |
-          deb http://kali.download/kali kali-rolling main contrib non-free
+          deb https://kali.download/kali kali-rolling main contrib non-free
 
     - name: Update APT cache
       become: true
