@@ -47,6 +47,7 @@ class AnsibleRunner:
                         playbook=playbook.name,
                         cancel_callback=lambda: None,
                         quiet=self.quiet,
+                        verbosity=4,
                     )
                 if ansible_result.status == "successful":
                     break

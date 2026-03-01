@@ -66,7 +66,7 @@ class TerraformDeployer:
         return
 
     def runtime_setup(self):
-        install_trials = 3
+        install_trials = 5
         errors = 0
 
         for _ in range(install_trials):
@@ -78,13 +78,7 @@ class TerraformDeployer:
                 break
             except Exception:
                 errors += 1
-                hosts: openstack.compute.v2.server.Server = (
-                    self.openstack_conn.list_servers()
-                )  # type: ignore
-                for host in hosts:
-                    if "attacker" in host.name:
-                        self.load_snapshot(host, wait=True)
-                        time.sleep(15)
+                time.sleep(30)
 
         if errors == install_trials:
             raise Exception(
@@ -157,7 +151,8 @@ class TerraformDeployer:
         # Load snapshots
         self.load_all_snapshots()
         time.sleep(10)
-        self.rebuild_error_hosts()
+        while self.get_error_hosts():
+            self.rebuild_error_hosts()
 
     def deploy_topology(self):
         self.teardown()
@@ -277,7 +272,11 @@ class TerraformDeployer:
                 # Weird bug in Kali where after rebuilding sometimes needs to be rebooted
                 time.sleep(10)
                 self.openstack_conn.compute.reboot_server(host.id, reboot_type="HARD")  # type: ignore
-                time.sleep(5)
+                while True:
+                    current = self.openstack_conn.get_server_by_id(host.id)
+                    if current and current.status == "ACTIVE":
+                        break
+                    time.sleep(1)
         return
 
     def get_error_hosts(self):
@@ -296,7 +295,4 @@ class TerraformDeployer:
             self.openstack_conn.delete_server(host.id, wait=True)
             self.load_snapshot(host.private_v4, wait=True)
 
-        error_hosts = self.get_error_hosts()
-        if len(error_hosts) > 0:
-            raise Exception("Error hosts still exist after rebuild")
         return

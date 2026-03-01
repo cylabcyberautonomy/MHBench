@@ -51,7 +51,7 @@ class OpenstackHostDeployer:
         # OS to image mapping - these should match your OpenStack environment
         self.os_image_mapping = {
             OSType.UBUNTU_20: "Ubuntu20",  # Update with actual image name/ID
-            OSType.KALI_LINUX: "KaliLinux",  # Update with actual image name/ID
+            OSType.KALI_LINUX: "kali-cloud",  # Update with actual image name/ID
         }
 
         # Flavor mapping - these should match your OpenStack environment

@@ -28,8 +28,8 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_att
 ### Attacker Subnet Hosts ###
 resource "openstack_compute_instance_v2" "attacker" {
   name        = "attacker"
-  image_name  = "Kali"
-  flavor_name = "m1.small"
+  image_name  = "kali-cloud"
+  flavor_name = "kali.large"
   key_pair    = var.key_name
   security_groups = [
     openstack_networking_secgroup_v2.attacker.name

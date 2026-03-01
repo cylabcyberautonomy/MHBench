@@ -47,7 +47,7 @@ class OpenstackAttackerNetworkDeployer:
         self.attacker_cidr = "192.168.199.0/24"
         self.attacker_host_ip = "192.168.199.14"
         self.attacker_host_name = "attacker_host"
-        self.attacker_host_image_name = "Kali"
+        self.attacker_host_image_name = "kali-cloud"
         self.attacker_host_flavor_name = "m1.small"
 
         self.attacker_freedom_sg_name = "attacker_freedom"
