@@ -1,4 +1,29 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class TerraformImages(BaseModel):
+    ubuntu: str = "Ubuntu20"
+    ubuntu_pip: str = "ubuntu20_pip"
+    kali: str = "kali-cloud"
+
+
+class TerraformFlavors(BaseModel):
+    tiny: str = "p2.tiny"
+    small: str = "m1.small"
+    medium: str = "m2.medium"
+    large: str = "m2.large"
+    huge: str = "m2.huge"
+
+
+class TerraformConfig(BaseModel):
+    images: TerraformImages = Field(default_factory=TerraformImages)
+    flavors: TerraformFlavors = Field(default_factory=TerraformFlavors)
+
+    def to_terraform_vars(self) -> dict:
+        return {
+            "images": self.images.model_dump(),
+            "flavors": self.flavors.model_dump(),
+        }
 
 
 class ElasticSearchConfig(BaseModel):
@@ -41,10 +66,14 @@ class Config(BaseModel):
     elastic_config: ElasticSearchConfig
     c2_config: C2Config | None = None
     openstack_config: OpenstackConfig
+    terraform_config: TerraformConfig = Field(default_factory=TerraformConfig)
     external_ip: str
     experiment_timeout_minutes: int
 
     @property
-    def terraform_vars(self) -> dict[str, str]:
-        """Expose Terraform variables derived from the OpenStack config."""
-        return self.openstack_config.to_terraform_vars()
+    def terraform_vars(self) -> dict:
+        """Expose Terraform variables derived from the OpenStack and Terraform configs."""
+        return {
+            **self.openstack_config.to_terraform_vars(),
+            **self.terraform_config.to_terraform_vars(),
+        }

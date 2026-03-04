@@ -2,12 +2,16 @@
 module "perry_manager" {
   source   = "../modules/perry_manager"
   key_name = var.perry_key_name
+  images   = var.images
+  flavors  = var.flavors
 }
 
 module "attacker" {
   source             = "../modules/attacker"
   router_external_id = module.perry_manager.router_external_id
   key_name           = var.perry_key_name
+  images             = var.images
+  flavors            = var.flavors
 }
 
 resource "openstack_networking_network_v2" "webserver_network" {
@@ -95,8 +99,8 @@ resource "openstack_networking_router_interface_v2" "database_router_interface" 
 resource "openstack_compute_instance_v2" "webserver" {
   count       = 10
   name        = "webserver_${count.index}"
-  image_name  = "Ubuntu20"
-  flavor_name = "p2.tiny"
+  image_name  = var.images.ubuntu
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -116,8 +120,8 @@ resource "openstack_compute_instance_v2" "webserver" {
 resource "openstack_compute_instance_v2" "employee_a_host" {
   count       = 10
   name        = "employee_a_${count.index}"
-  image_name  = "Ubuntu20"
-  flavor_name = "p2.tiny"
+  image_name  = var.images.ubuntu
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -136,8 +140,8 @@ resource "openstack_compute_instance_v2" "employee_a_host" {
 resource "openstack_compute_instance_v2" "employee_b_host" {
   count       = 10
   name        = "employee_b_${count.index}"
-  image_name  = "Ubuntu20"
-  flavor_name = "p2.tiny"
+  image_name  = var.images.ubuntu
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -156,8 +160,8 @@ resource "openstack_compute_instance_v2" "employee_b_host" {
 resource "openstack_compute_instance_v2" "database" {
   count       = 10
   name        = "database_${count.index}"
-  image_name  = "Ubuntu20"
-  flavor_name = "p2.tiny"
+  image_name  = var.images.ubuntu
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
