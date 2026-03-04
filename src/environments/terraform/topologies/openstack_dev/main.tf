@@ -2,12 +2,16 @@
 module "perry_manager" {
   source   = "../modules/perry_manager"
   key_name = var.perry_key_name
+  images   = var.images
+  flavors  = var.flavors
 }
 
 module "attacker" {
   source             = "../modules/attacker"
   router_external_id = module.perry_manager.router_external_id
   key_name           = var.perry_key_name
+  images             = var.images
+  flavors            = var.flavors
 }
 
 resource "openstack_networking_network_v2" "dev_network" {
@@ -37,8 +41,8 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_com
 resource "openstack_compute_instance_v2" "host" {
   count       = 5
   name        = "host_${count.index}"
-  image_name  = "Ubuntu20"
-  flavor_name = "p2.tiny"
+  image_name  = var.images.ubuntu
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,

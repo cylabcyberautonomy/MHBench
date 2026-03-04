@@ -6,6 +6,22 @@ data "openstack_networking_network_v2" "external_network" {
 variable "key_name" {
   description = "The name of the key pair to use for the instance"
 }
+variable "images" {
+  type = object({
+    ubuntu     = string
+    ubuntu_pip = string
+    kali       = string
+  })
+}
+variable "flavors" {
+  type = object({
+    tiny   = string
+    small  = string
+    medium = string
+    large  = string
+    huge   = string
+  })
+}
 
 output "external_network_id" {
   value = data.openstack_networking_network_v2.external_network.id
@@ -58,8 +74,8 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_ext
 ### Host ###
 resource "openstack_compute_instance_v2" "manage_host" {
   name        = "manage_host"
-  image_name  = "Ubuntu20"
-  flavor_name = "m1.small"
+  image_name  = var.images.ubuntu
+  flavor_name = var.flavors.small
   key_pair    = var.key_name
   security_groups = [
     openstack_networking_secgroup_v2.talk_to_manage.name,

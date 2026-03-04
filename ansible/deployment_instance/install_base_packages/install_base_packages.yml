@@ -1,6 +1,18 @@
 ---
 - hosts: "{{ host }}"
   remote_user: root
+  become: yes
+
+  pre_tasks:
+    - name: Switch http -> https in ubuntu.sources
+      replace:
+        path: /etc/apt/sources.list.d/ubuntu.sources
+        regexp: 'http://'
+        replace: 'https://'
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
 
   tasks:
     - name: Remove automatic updates

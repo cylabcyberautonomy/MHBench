@@ -17,6 +17,14 @@ class ConfigService:
         with open(self.config_file, "r") as f:
             config_data = json.load(f)
 
+        # Optionally load terraform.json from the same directory
+        terraform_config_path = os.path.join(
+            os.path.dirname(self.config_file), "terraform.json"
+        )
+        if os.path.exists(terraform_config_path):
+            with open(terraform_config_path, "r") as f:
+                config_data["terraform_config"] = json.load(f)
+
         return Config(**config_data)
 
     def get_config(self):

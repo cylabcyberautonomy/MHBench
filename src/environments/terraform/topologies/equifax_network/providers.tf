@@ -40,6 +40,24 @@ variable "perry_key_name" {
   description = "Name of the keypair to use for the Perry instance"
 }
 
+variable "images" {
+  type = object({
+    ubuntu     = string
+    ubuntu_pip = string
+    kali       = string
+  })
+}
+
+variable "flavors" {
+  type = object({
+    tiny   = string
+    small  = string
+    medium = string
+    large  = string
+    huge   = string
+  })
+}
+
 # Configure the OpenStack Provider
 provider "openstack" {
   user_name   = var.openstack_username
