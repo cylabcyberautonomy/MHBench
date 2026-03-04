@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -62,11 +64,17 @@ class OpenstackConfig(BaseModel):
         }
 
 
+class WebhookConfig(BaseModel):
+    url: str
+    type: Literal["discord", "slack"]
+
+
 class Config(BaseModel):
     elastic_config: ElasticSearchConfig
     c2_config: C2Config | None = None
     openstack_config: OpenstackConfig
     terraform_config: TerraformConfig = Field(default_factory=TerraformConfig)
+    webhook_config: WebhookConfig | None = None
     external_ip: str
     experiment_timeout_minutes: int
 

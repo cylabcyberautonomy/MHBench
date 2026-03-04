@@ -61,7 +61,7 @@ resource "openstack_compute_instance_v2" "webserver" {
   count       = 2
   name        = "webserver_${count.index}"
   image_name  = var.images.ubuntu
-  flavor_name = var.flavors.tiny
+  flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
