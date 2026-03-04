@@ -8,3 +8,5 @@
 !config.py
 # And config_service.py
 !config_service.py
+# and terraform_example.json
+!terraform_example.json

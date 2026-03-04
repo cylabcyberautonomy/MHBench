@@ -1,0 +1,14 @@
+{
+  "images": {
+    "ubuntu": "Ubuntu24",
+    "ubuntu_pip": "ubuntu20_pip",
+    "kali": "Kali"
+  },
+  "flavors": {
+    "tiny": "p2.tiny",
+    "small": "m1.small",
+    "medium": "m2.medium", 
+    "large": "m2.large",
+    "huge": "m2.huge"
+  }
+}
