@@ -5,6 +5,22 @@ variable "router_external_id" {
 variable "key_name" {
   description = "The key name to use for the instances"
 }
+variable "images" {
+  type = object({
+    ubuntu     = string
+    ubuntu_pip = string
+    kali       = string
+  })
+}
+variable "flavors" {
+  type = object({
+    tiny   = string
+    small  = string
+    medium = string
+    large  = string
+    huge   = string
+  })
+}
 
 resource "openstack_networking_network_v2" "attacker_network" {
   name           = "attacker_network"
@@ -28,8 +44,8 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_att
 ### Attacker Subnet Hosts ###
 resource "openstack_compute_instance_v2" "attacker" {
   name        = "attacker"
-  image_name  = "kali-cloud"
-  flavor_name = "kali.large"
+  image_name  = var.images.kali
+  flavor_name = var.flavors.large
   key_pair    = var.key_name
   security_groups = [
     openstack_networking_secgroup_v2.attacker.name
