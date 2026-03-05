@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import openstack.compute.v2.server
 import openstack.image.v2.image
@@ -198,12 +199,15 @@ class TerraformDeployer:
                     f"Successfully loaded snapshot {snapshot_name} with id {image.id}"
                 )
 
-    def save_all_snapshots(self, wait=True):
-        logger.debug("Saving all snapshots...")
-        images = []
-        for instance in self.openstack_conn.list_servers():
-            image = self.save_snapshot(instance)
-            images.append(image)
+    def save_all_snapshots(self, batch_size=5):
+        servers = list(self.openstack_conn.list_servers())
+        logger.debug(f"Saving snapshots for {len(servers)} servers (batch_size={batch_size})...")
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            futures = {executor.submit(self.save_snapshot, s): s for s in servers}
+            for future in as_completed(futures):
+                server = futures[future]
+                future.result()  # re-raises any exception from the snapshot thread
+                logger.debug(f"Snapshot saved for {server.name}")
 
     def clean_snapshots(self):
         logger.debug("Cleaning all snapshots...")
