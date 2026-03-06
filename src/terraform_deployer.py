@@ -164,31 +164,30 @@ class TerraformDeployer:
         logger.debug(f"Found management server: {manage_ip}")
         self.ansible_runner.update_management_ip(manage_ip)
 
-    def save_snapshot(self, host, retries=3, retry_delay=30):
+    def save_snapshot(self, host, poll_interval=120, max_attempts=3):
         snapshot_name = host.name + "_image"
 
-        for attempt in range(1, retries + 1):
-            # Clean up any existing or stuck image before each attempt
+        for attempt in range(1, max_attempts + 1):
             image = self.openstack_conn.get_image(snapshot_name)
             if image:
                 logger.debug(f"Image '{snapshot_name}' already exists. Deleting...")
                 self.openstack_conn.delete_image(image.id, wait=True)  # type: ignore
 
-            print(f"[SNAPSHOT] {snapshot_name}: starting attempt {attempt}/{retries}...")
-            try:
-                image = self.openstack_conn.create_image_snapshot(
-                    snapshot_name, host.id, wait=True
-                )
-                print(f"[SNAPSHOT] {snapshot_name}: done.")
-                return image.id
-            except Exception as e:
-                print(f"[SNAPSHOT] {snapshot_name}: error on attempt {attempt}/{retries}: {e}")
+            print(f"[SNAPSHOT] {snapshot_name}: starting (attempt {attempt}/{max_attempts})...")
+            self.openstack_conn.create_image_snapshot(snapshot_name, host.id, wait=False)
 
-            if attempt < retries:
-                print(f"[SNAPSHOT] {snapshot_name}: retrying in {retry_delay}s...")
-                time.sleep(retry_delay)
-            else:
-                raise RuntimeError(f"[SNAPSHOT] {snapshot_name}: failed after {retries} attempts")
+            while True:
+                time.sleep(poll_interval)
+                image = self.openstack_conn.get_image(snapshot_name)
+                if image and image.status == "active":
+                    print(f"[SNAPSHOT] {snapshot_name}: done.")
+                    return image.id
+                if not image or image.status not in ("queued", "saving"):
+                    status = image.status if image else "missing"
+                    print(f"[SNAPSHOT] {snapshot_name}: upload lost on attempt {attempt}/{max_attempts} (status={status}), retrying...")
+                    break
+
+        raise RuntimeError(f"[SNAPSHOT] {snapshot_name}: failed after {max_attempts} attempts")
 
     def load_snapshot(self, host, wait=False):
         snapshot_name = host.name + "_image"
@@ -217,10 +216,13 @@ class TerraformDeployer:
             futures = {executor.submit(self.save_snapshot, s): s for s in servers}
             for future in as_completed(futures):
                 server = futures[future]
-                future.result()
-                logger.debug(f"Snapshot saved for {server.name}")
+                exc = future.exception()
+                if exc:
+                    logger.warning(f"[SNAPSHOT] {server.name} thread exited with error: {exc}")
+                else:
+                    logger.debug(f"Snapshot saved for {server.name}")
 
-    def save_all_snapshots(self, batch_size=10):
+    def save_all_snapshots(self, batch_size=5):
         servers = list(self.openstack_conn.list_servers())
         logger.debug(f"Saving snapshots for {len(servers)} servers (batch_size={batch_size})...")
 
@@ -253,6 +255,17 @@ class TerraformDeployer:
         #     self._snapshot_group(unrecognized, batch_size)
 
         self._snapshot_group(servers, batch_size)
+
+        while True:
+            missing = []
+            for s in servers:
+                image = self.openstack_conn.get_image(s.name + "_image")
+                if not image or image.status != "active":
+                    missing.append(s)
+            if not missing:
+                break
+            print(f"[SNAPSHOT] {len(missing)} image(s) not active, retrying: {[s.name for s in missing]}")
+            self._snapshot_group(missing, batch_size)
 
     def clean_snapshots(self):
         logger.debug("Cleaning all snapshots...")
