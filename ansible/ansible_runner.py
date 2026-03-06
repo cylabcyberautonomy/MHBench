@@ -14,11 +14,12 @@ logger = get_logger()
 
 
 class AnsibleRunner:
-    def __init__(self, ssh_key_path, management_ip, ansible_dir, log_path, quiet=False):
+    def __init__(self, ssh_key_path, management_ip, ansible_dir, log_path, quiet=False, verbosity=4):
         self.ssh_key_path = ssh_key_path
         self.management_ip = management_ip
         self.ansible_dir = ansible_dir
         self.quiet = quiet
+        self.verbosity = verbosity
         self.log_path = log_path
         self.MAX_RETRIES = 3
 
@@ -47,7 +48,7 @@ class AnsibleRunner:
                         playbook=playbook.name,
                         cancel_callback=lambda: None,
                         quiet=self.quiet,
-                        verbosity=4,
+                        verbosity=self.verbosity,
                     )
                 if ansible_result.status == "successful":
                     break

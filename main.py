@@ -54,8 +54,15 @@ def _make_notifier(config) -> WebhookNotifier | None:
     show_default=True,
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
+@click.option(
+    "--verbosity",
+    help="Ansible verbosity level (0=quiet, 4=very verbose)",
+    default=4,
+    show_default=True,
+    type=click.IntRange(0, 4),
+)
 @click.pass_context
-def env(ctx, type: str, config_file: str):
+def env(ctx, type: str, config_file: str, verbosity: int):
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     experiment_dir = f"./output/misc/{timestamp}"
     # Create the experiment directory
@@ -74,7 +81,7 @@ def env(ctx, type: str, config_file: str):
         None,
         "./ansible/",
         experiment_dir,
-        False,
+        verbosity=verbosity,
     )
 
     # Try to load as a specification class first

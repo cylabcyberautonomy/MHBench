@@ -164,18 +164,31 @@ class TerraformDeployer:
         logger.debug(f"Found management server: {manage_ip}")
         self.ansible_runner.update_management_ip(manage_ip)
 
-    def save_snapshot(self, host):
+    def save_snapshot(self, host, retries=3, retry_delay=30):
         snapshot_name = host.name + "_image"
-        image = self.openstack_conn.get_image(snapshot_name)
-        if image:
-            logger.debug(f"Image '{snapshot_name}' already exists. Deleting...")
-            self.openstack_conn.delete_image(image.id, wait=True)  # type: ignore
 
-        logger.debug(f"Creating snapshot {snapshot_name} for instance {host.id}...")
-        image = self.openstack_conn.create_image_snapshot(
-            snapshot_name, host.id, wait=True
-        )
-        return image.id
+        for attempt in range(1, retries + 1):
+            # Clean up any existing or stuck image before each attempt
+            image = self.openstack_conn.get_image(snapshot_name)
+            if image:
+                logger.debug(f"Image '{snapshot_name}' already exists. Deleting...")
+                self.openstack_conn.delete_image(image.id, wait=True)  # type: ignore
+
+            print(f"[SNAPSHOT] {snapshot_name}: starting attempt {attempt}/{retries}...")
+            try:
+                image = self.openstack_conn.create_image_snapshot(
+                    snapshot_name, host.id, wait=True
+                )
+                print(f"[SNAPSHOT] {snapshot_name}: done.")
+                return image.id
+            except Exception as e:
+                print(f"[SNAPSHOT] {snapshot_name}: error on attempt {attempt}/{retries}: {e}")
+
+            if attempt < retries:
+                print(f"[SNAPSHOT] {snapshot_name}: retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+            else:
+                raise RuntimeError(f"[SNAPSHOT] {snapshot_name}: failed after {retries} attempts")
 
     def load_snapshot(self, host, wait=False):
         snapshot_name = host.name + "_image"
@@ -199,15 +212,47 @@ class TerraformDeployer:
                     f"Successfully loaded snapshot {snapshot_name} with id {image.id}"
                 )
 
-    def save_all_snapshots(self, batch_size=5):
-        servers = list(self.openstack_conn.list_servers())
-        logger.debug(f"Saving snapshots for {len(servers)} servers (batch_size={batch_size})...")
+    def _snapshot_group(self, servers, batch_size):
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             futures = {executor.submit(self.save_snapshot, s): s for s in servers}
             for future in as_completed(futures):
                 server = futures[future]
-                future.result()  # re-raises any exception from the snapshot thread
+                future.result()
                 logger.debug(f"Snapshot saved for {server.name}")
+
+    def save_all_snapshots(self, batch_size=10):
+        servers = list(self.openstack_conn.list_servers())
+        logger.debug(f"Saving snapshots for {len(servers)} servers (batch_size={batch_size})...")
+
+        # # Group servers by flavor size, largest first, to avoid starvation.
+        # # Flavor names come from config so we can map actual name → logical size.
+        # size_order = ["huge", "large", "medium", "small", "tiny"]
+        # flavors = self.config.terraform_config.flavors
+        # flavor_to_size = {getattr(flavors, size): size for size in size_order}
+        #
+        # buckets: dict[str, list] = {size: [] for size in size_order}
+        # unrecognized: list = []
+        # for server in servers:
+        #     flavor_name = (server.flavor or {}).get("original_name", "")
+        #     size = flavor_to_size.get(flavor_name)
+        #     if size:
+        #         buckets[size].append(server)
+        #     else:
+        #         unrecognized.append(server)
+        #
+        # for size in size_order:
+        #     group = buckets[size]
+        #     if not group:
+        #         continue
+        #     print(f"[SNAPSHOT] Starting {size} tier ({len(group)} server(s))...")
+        #     self._snapshot_group(group, batch_size)
+        #     print(f"[SNAPSHOT] {size} tier complete.")
+        #
+        # if unrecognized:
+        #     print(f"[SNAPSHOT] Snapshotting {len(unrecognized)} server(s) with unrecognized flavor...")
+        #     self._snapshot_group(unrecognized, batch_size)
+
+        self._snapshot_group(servers, batch_size)
 
     def clean_snapshots(self):
         logger.debug("Cleaning all snapshots...")
