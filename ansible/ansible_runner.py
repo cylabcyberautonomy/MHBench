@@ -1,6 +1,7 @@
 import ansible_runner
 
 from rich import print
+import tempfile
 import time
 
 from .ansible_playbook import AnsiblePlaybook
@@ -23,6 +24,13 @@ class AnsibleRunner:
         self.log_path = log_path
         self.MAX_RETRIES = 3
 
+        # Per-process temp directory for ansible_runner's writable state
+        # (env/extravars, env/envvars, artifacts/).  Using a unique dir per
+        # AnsibleRunner instance prevents parallel MHBench subprocesses from
+        # racing on the shared ./ansible/env/ files.  Playbooks remain in
+        # ansible_dir, referenced via project_dir.
+        self._runner_tmp = tempfile.TemporaryDirectory(prefix="mhbench-ansible-")
+
         self.ansible_vars_default = {
             "manage_ip": self.management_ip,
             "ssh_key_path": self.ssh_key_path,
@@ -42,13 +50,18 @@ class AnsibleRunner:
                 with redirect_stdout(f):
                     # Merge default params with playbook specific params
                     playbook_full_params = self.ansible_vars_default | playbook.params
+                    manage_slug = (self.management_ip or "default").replace(".", "_")
+                    control_path_dir = f"/tmp/ansible-cp-{manage_slug}"
                     ansible_result = ansible_runner.run(
                         extravars=playbook_full_params,
-                        private_data_dir=self.ansible_dir,
+                        private_data_dir=self._runner_tmp.name,
+                        project_dir=path.abspath(self.ansible_dir),
+                        inventory=path.abspath(path.join(self.ansible_dir, "inventory")),
                         playbook=playbook.name,
                         cancel_callback=lambda: None,
                         quiet=self.quiet,
                         verbosity=self.verbosity,
+                        envvars={"ANSIBLE_SSH_CONTROL_PATH_DIR": control_path_dir},
                     )
                 if ansible_result.status == "successful":
                     break
