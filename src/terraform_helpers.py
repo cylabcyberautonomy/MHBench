@@ -40,23 +40,59 @@ def deploy_network(name: str, config: Config) -> None:
         text=True,
     )
 
+    # Use a per-project state file via -state= instead of workspaces.
+    # Workspaces store the selected workspace in .terraform/environment (a file
+    # in the shared topology directory), which causes a race when multiple
+    # processes compile in parallel — they all overwrite each other's selection
+    # and end up locking the same state file.  With -state=, each project gets
+    # its own state file path and the shared directory is never mutated.
+    project_name = config.openstack_config.project_name
+    state_dir = os.path.abspath(os.path.join(".terraform_states", project_name))
+    os.makedirs(state_dir, exist_ok=True)
+    state_file = os.path.join(state_dir, f"{name}.tfstate")
+
+    log_dir = os.path.abspath(os.path.join(".terraform_states", project_name))
+    tf_log_file = os.path.join(log_dir, f"{name}_terraform.log")
+
     with _temporary_tfvars(config) as tfvars_path:
-        process = subprocess.Popen(
-            [
-                "terraform",
-                "apply",
-                f"-var-file={tfvars_path}",
-                "-auto-approve",
-            ],
-            cwd=deployment_dir,
-            stdout=subprocess.PIPE,
-            universal_newlines=True,
-        )
-        process.communicate()
+        # Destroy first so Terraform state is clean before recreating.
+        # The OpenStack resources are already gone (deleted by teardown_helper
+        # before deploy_network is called), but the state file still references
+        # their old IDs. Destroying explicitly reconciles the state.
+        with open(tf_log_file, "a") as log:
+            log.write(f"\n=== terraform destroy ===\n")
+            proc = subprocess.Popen(
+                [
+                    "terraform", "destroy",
+                    f"-state={state_file}",
+                    f"-var-file={tfvars_path}",
+                    "-auto-approve",
+                ],
+                cwd=deployment_dir,
+                stdout=log,
+                stderr=log,
+                universal_newlines=True,
+            )
+            proc.communicate()
+
+            log.write(f"\n=== terraform apply ===\n")
+            proc = subprocess.Popen(
+                [
+                    "terraform", "apply",
+                    f"-state={state_file}",
+                    f"-var-file={tfvars_path}",
+                    "-auto-approve",
+                ],
+                cwd=deployment_dir,
+                stdout=log,
+                stderr=log,
+                universal_newlines=True,
+            )
+            proc.communicate()
 
 
 def destroy_network(name: str, config: Config) -> None:
-    deployment_dir = os.path.join("src/topologies", name)
+    deployment_dir = os.path.join("src/environments/terraform/topologies", name)
     subprocess.run(
         ["terraform", "init"],
         cwd=deployment_dir,
@@ -64,16 +100,20 @@ def destroy_network(name: str, config: Config) -> None:
         text=True,
     )
 
+    project_name = config.openstack_config.project_name
+    state_file = os.path.abspath(
+        os.path.join(".terraform_states", project_name, f"{name}.tfstate")
+    )
+
     with _temporary_tfvars(config) as tfvars_path:
-        process = subprocess.Popen(
+        subprocess.Popen(
             [
-                "terraform",
-                "destroy",
+                "terraform", "destroy",
+                f"-state={state_file}",
                 f"-var-file={tfvars_path}",
                 "-auto-approve",
             ],
             cwd=deployment_dir,
             stdout=subprocess.PIPE,
             universal_newlines=True,
-        )
-        process.communicate()
+        ).communicate()
