@@ -172,3 +172,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Per-project Terraform state files (generated during parallel compiles)
+.terraform_states/
