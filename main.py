@@ -52,7 +52,7 @@ def _make_notifier(config) -> WebhookNotifier | None:
     help="Path to the MHBench configuration JSON",
     default="config/config.json",
     show_default=True,
-    type=click.Path(exists=True, dir_okay=False, path_type=str),
+    type=click.Path(dir_okay=False, path_type=str),
 )
 @click.option(
     "--verbosity",
@@ -63,13 +63,14 @@ def _make_notifier(config) -> WebhookNotifier | None:
 )
 @click.pass_context
 def env(ctx, type: str, config_file: str, verbosity: int):
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    experiment_dir = f"./output/misc/{timestamp}"
-    # Create the experiment directory
-    os.makedirs(experiment_dir, exist_ok=True)
-
     ctx.ensure_object(SimpleNamespace)
     config = ConfigService(config_file).get_config()
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    project_name = config.openstack_config.project_name
+    experiment_dir = f"./output/misc/{timestamp}_{project_name}"
+    # Create the experiment directory
+    os.makedirs(experiment_dir, exist_ok=True)
     ctx.obj.config = config
     ctx.obj.config_path = config_file
     ctx.obj.env_type = type
