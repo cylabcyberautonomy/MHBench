@@ -26,15 +26,15 @@ def delete_floating_ips(conn):
         try:
             conn.delete_floating_ip(floating_ip.id)
         except SDKException:
-            pass
+            print(f"  Warning: could not delete floating IP {floating_ip.id}")
 
 
 # Delete routers
 def delete_routers(conn):
     for router in conn.list_routers():
         # First, detach all router interfaces
-        for port in conn.list_ports():
-            if port.device_owner == "network:router_interface":
+        for port in conn.network.ports(device_id=router.id):
+            if port.device_owner == "network:router_interface" and port.fixed_ips:
                 subnet_id = port.fixed_ips[0]["subnet_id"]
                 try:
                     conn.remove_router_interface(router, subnet_id=subnet_id)
@@ -44,8 +44,10 @@ def delete_routers(conn):
                     )
                     continue
 
-        # Finally, delete the router
-        conn.delete_router(router.id)
+        try:
+            conn.delete_router(router.id)
+        except SDKException as e:
+            print(f"  Warning: could not delete router {router.id}: {e}")
 
 
 # Delete all ports
@@ -59,7 +61,7 @@ def delete_ports(conn):
             try:
                 conn.delete_port(port.id)
             except SDKException:
-                pass
+                print(f"  Warning: could not delete port {port.id}")
 
 
 subnet_exclude_list = [
@@ -78,8 +80,8 @@ def delete_subnets(conn):
             continue
         try:
             conn.delete_subnet(subnet.id)
-        except SDKException:
-            pass
+        except SDKException as e:
+            print(f"  Warning: could not delete subnet {subnet.name} ({subnet.id}): {e}")
 
 
 network_exclude_list = ["shared", "external", "public"]
@@ -92,8 +94,8 @@ def delete_networks(conn):
             continue
         try:
             conn.delete_network(network.id)
-        except SDKException:
-            pass
+        except SDKException as e:
+            print(f"  Warning: could not delete network {network.name} ({network.id}): {e}")
 
 
 security_group_exclude_list = ["default"]
@@ -101,10 +103,19 @@ security_group_exclude_list = ["default"]
 
 def delete_security_groups(conn):
     security_groups = conn.list_security_groups()
-    for sg in security_groups:
-        if sg.name in security_group_exclude_list:
-            continue
+    to_delete = [sg for sg in security_groups if sg.name not in security_group_exclude_list]
+    for sg in to_delete:
+        # Remove this SG from any ports still referencing it (e.g. DHCP ports
+        # that survived network/subnet deletion), otherwise Neutron will reject
+        # the delete with "Security Group X in use".
+        for port in conn.network.ports():
+            if sg.id in (port.security_group_ids or []):
+                try:
+                    updated = [s for s in port.security_group_ids if s != sg.id]
+                    conn.network.update_port(port.id, security_groups=updated)
+                except SDKException as e:
+                    print(f"  Warning: could not remove SG {sg.name} from port {port.id}: {e}")
         try:
             conn.delete_security_group(sg.id)
-        except SDKException:
-            pass
+        except SDKException as e:
+            print(f"  Warning: could not delete security group {sg.name} ({sg.id}): {e}")
