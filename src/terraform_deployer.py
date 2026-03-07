@@ -106,6 +106,7 @@ class TerraformDeployer:
         while conn.list_routers():
             time.sleep(0.5)
 
+        teardown_helper.delete_ports(conn)
         teardown_helper.delete_subnets(conn)
         teardown_helper.delete_networks(conn)
         teardown_helper.delete_security_groups(conn)
@@ -172,6 +173,15 @@ class TerraformDeployer:
             if image:
                 logger.debug(f"Image '{snapshot_name}' already exists. Deleting...")
                 self.openstack_conn.delete_image(image.id, wait=True)  # type: ignore
+
+            # Wait for any in-progress upload to finish before issuing a new
+            # createImage — otherwise Nova returns 409 Conflict.
+            while True:
+                server = self.openstack_conn.get_server_by_id(host.id)
+                if server and getattr(server, "task_state", None) == "image_uploading":
+                    time.sleep(30)
+                else:
+                    break
 
             print(f"[SNAPSHOT] {snapshot_name}: starting (attempt {attempt}/{max_attempts})...")
             self.openstack_conn.create_image_snapshot(snapshot_name, host.id, wait=False)
