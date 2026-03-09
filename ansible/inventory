@@ -24,5 +24,5 @@ ansible_ssh_common_args='-i {{ ssh_key_path }}'
 ansible_ssh_common_args='-i {{ ssh_key_path }} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ProxyCommand="ssh -i {{ ssh_key_path }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q root@{{ manage_ip }}"'
 
 [all:vars]
-ansible_ssh_timeout=30
-ansible_connect_timeout=30
+ansible_ssh_timeout=60
+ansible_connect_timeout=60
