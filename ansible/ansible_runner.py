@@ -22,7 +22,7 @@ class AnsibleRunner:
         self.quiet = quiet
         self.verbosity = verbosity
         self.log_path = log_path
-        self.MAX_RETRIES = 3
+        self.MAX_RETRIES = 5
 
         # Per-process temp directory for ansible_runner's writable state
         # (env/extravars, env/envvars, artifacts/).  Using a unique dir per
