@@ -23,7 +23,7 @@
   "external_ip": "10.20.20.1",
   "experiment_timeout_minutes": 75,
   "webhook_config": {
-    "url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL",
-    "type": "discord"
+    "type": "slack",
+    "url": "https://hooks.slack.com/services/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"
   }
 }
