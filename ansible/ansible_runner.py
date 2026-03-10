@@ -21,7 +21,7 @@ class AnsibleRunner:
         self.quiet = quiet
         self.verbosity = verbosity
         self.log_path = log_path
-        self.MAX_RETRIES = 3
+        self.MAX_RETRIES = 5
 
         self.ansible_vars_default = {
             "manage_ip": self.management_ip,
