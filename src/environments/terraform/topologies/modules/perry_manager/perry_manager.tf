@@ -53,10 +53,10 @@ variable "name_prefix" {
   default     = "perry"
 }
 
-variable "compute_node_hostnames" {
-  type        = list(string)
-  description = "Physical compute node hostnames to pin VMs to via Nova scheduler hints. Empty list = no pinning."
-  default     = []
+variable "availability_zone" {
+  type        = string
+  description = "Nova availability zone to pin VMs to. Empty string = no pinning."
+  default     = ""
 }
 
 resource "openstack_networking_network_v2" "manage_network" {
@@ -99,14 +99,7 @@ resource "openstack_compute_instance_v2" "manage_host" {
     fixed_ip_v4 = "192.168.198.14"
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.manage]
 }

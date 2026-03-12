@@ -77,7 +77,7 @@ class Config(BaseModel):
     webhook_config: WebhookConfig | None = None
     external_ip: str
     experiment_timeout_minutes: int
-    compute_nodes: list[str] = []  # hostnames to pin VMs to via Nova scheduler hints
+    availability_zone: str = ""  # Nova AZ to pin VMs to (created by Perry per slot)
 
     @property
     def terraform_vars(self) -> dict:
@@ -85,5 +85,5 @@ class Config(BaseModel):
         return {
             **self.openstack_config.to_terraform_vars(),
             **self.terraform_config.to_terraform_vars(),
-            "compute_node_hostnames": self.compute_nodes,
+            "availability_zone": self.availability_zone,
         }

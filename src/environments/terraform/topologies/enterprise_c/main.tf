@@ -5,7 +5,7 @@ module "perry_manager" {
   key_name = var.perry_key_name
   images   = var.images
   flavors  = var.flavors
-  compute_node_hostnames = var.compute_node_hostnames
+  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -15,7 +15,7 @@ module "attacker" {
   key_name           = var.perry_key_name
   images             = var.images
   flavors            = var.flavors
-  compute_node_hostnames = var.compute_node_hostnames
+  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -98,14 +98,7 @@ resource "openstack_compute_instance_v2" "employee_one" {
     fixed_ip_v4 = "192.168.200.${count.index + 10}"
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
 }
@@ -125,14 +118,7 @@ resource "openstack_compute_instance_v2" "manage_employee_one" {
     name = "${var.project_name}-employee_one_network"
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
 }
@@ -154,14 +140,7 @@ resource "openstack_compute_instance_v2" "employee_two" {
     fixed_ip_v4 = "192.168.201.${count.index + 10}"
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
 }
@@ -181,14 +160,7 @@ resource "openstack_compute_instance_v2" "manage_employee_two" {
     name = "${var.project_name}-employee_two_network"
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
 }
@@ -209,14 +181,7 @@ resource "openstack_compute_instance_v2" "ot_sensors" {
     fixed_ip_v4 = "192.168.203.${count.index + 10}"
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.OT_subnet]
 }
@@ -237,14 +202,7 @@ resource "openstack_compute_instance_v2" "ot_hosts" {
     fixed_ip_v4 = "192.168.203.${count.index + 50}"
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.OT_subnet]
 }
