@@ -58,10 +58,10 @@ variable "flavors" {
   })
 }
 
-variable "compute_node_hostnames" {
-  type        = list(string)
-  description = "Physical compute node hostnames to pin VMs to via Nova scheduler hints. Empty list = no pinning."
-  default     = []
+variable "availability_zone" {
+  type        = string
+  description = "Nova availability zone to pin VMs to. Empty string = no pinning."
+  default     = ""
 }
 
 # Configure the OpenStack Provider

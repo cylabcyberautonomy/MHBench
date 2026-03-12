@@ -237,14 +237,7 @@ resource "openstack_compute_instance_v2" "manage_host" {
     port = openstack_networking_port_v2.manage_port_host.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 resource "openstack_networking_floatingip_v2" "manage_floating_ip" {
@@ -267,14 +260,7 @@ resource "openstack_compute_instance_v2" "webserver_A" {
     port = openstack_networking_port_v2.webserver_A_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 resource "openstack_compute_instance_v2" "webserver_B" {
@@ -287,14 +273,7 @@ resource "openstack_compute_instance_v2" "webserver_B" {
     port = openstack_networking_port_v2.webserver_B_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 resource "openstack_compute_instance_v2" "webserver_C" {
@@ -307,14 +286,7 @@ resource "openstack_compute_instance_v2" "webserver_C" {
     port = openstack_networking_port_v2.webserver_C_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 ### Corporate Subnet Hosts ###
@@ -328,14 +300,7 @@ resource "openstack_compute_instance_v2" "employee_A" {
     port = openstack_networking_port_v2.employee_A_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 resource "openstack_compute_instance_v2" "employee_B" {
@@ -348,14 +313,7 @@ resource "openstack_compute_instance_v2" "employee_B" {
     port = openstack_networking_port_v2.employee_B_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 resource "openstack_compute_instance_v2" "database_A" {
@@ -368,14 +326,7 @@ resource "openstack_compute_instance_v2" "database_A" {
     port = openstack_networking_port_v2.database_A_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 resource "openstack_compute_instance_v2" "database_B" {
@@ -388,14 +339,7 @@ resource "openstack_compute_instance_v2" "database_B" {
     port = openstack_networking_port_v2.database_B_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
 
 ### Attacker Subnet Hosts ###
@@ -409,12 +353,5 @@ resource "openstack_compute_instance_v2" "attacker" {
     port = openstack_networking_port_v2.attacker_port.id
   }
 
-  dynamic "scheduler_hints" {
-    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
-    content {
-      additional_properties = {
-        "force_hosts" = join(",", var.compute_node_hostnames)
-      }
-    }
-  }
+  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 }
