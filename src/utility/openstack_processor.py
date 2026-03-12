@@ -14,7 +14,7 @@ def get_hosts_on_subnet(
     hosts = []
 
     for server in conn.compute.servers():  # type: ignore
-        if host_name_prefix and not server.name.startswith(host_name_prefix):
+        if host_name_prefix and host_name_prefix not in server.name:
             continue
 
         for network, network_attrs in server.addresses.items():

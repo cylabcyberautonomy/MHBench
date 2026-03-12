@@ -22,14 +22,26 @@ variable "flavors" {
   })
 }
 
+variable "name_prefix" {
+  type        = string
+  description = "Project name prefix for VM names to avoid cross-project conflicts."
+  default     = "perry"
+}
+
+variable "compute_node_hostnames" {
+  type        = list(string)
+  description = "Physical compute node hostnames to pin VMs to via Nova scheduler hints. Empty list = no pinning."
+  default     = []
+}
+
 resource "openstack_networking_network_v2" "attacker_network" {
-  name           = "attacker_network"
+  name           = "${var.name_prefix}-attacker_network"
   admin_state_up = "true"
   description    = "The attacker network"
 }
 
 resource "openstack_networking_subnet_v2" "attacker_subnet" {
-  name            = "attacker_subnet"
+  name            = "${var.name_prefix}-attacker_subnet"
   network_id      = openstack_networking_network_v2.attacker_network.id
   cidr            = "192.168.202.0/24"
   ip_version      = 4
@@ -43,7 +55,7 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_att
 
 ### Attacker Subnet Hosts ###
 resource "openstack_compute_instance_v2" "attacker" {
-  name        = "attacker"
+  name        = "${var.name_prefix}-attacker"
   image_name  = var.images.kali
   flavor_name = var.flavors.large
   key_pair    = var.key_name
@@ -51,8 +63,18 @@ resource "openstack_compute_instance_v2" "attacker" {
     openstack_networking_secgroup_v2.attacker.name
   ]
   network {
-    name        = "attacker_network"
+    name        = "${var.name_prefix}-attacker_network"
     fixed_ip_v4 = "192.168.202.100"
+  }
+
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.attacker_subnet]

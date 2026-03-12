@@ -1,6 +1,6 @@
 ### Webserver Network Rules ###
 resource "openstack_networking_secgroup_v2" "webserver" {
-  name        = "webserver"
+  name        = "${var.project_name}-webserver"
   description = "Webserver security group"
 }
 
@@ -27,7 +27,7 @@ resource "openstack_networking_secgroup_rule_v2" "webserver_tcp_out" {
 
 ### Critical Company Network Rules ###
 resource "openstack_networking_secgroup_v2" "critical_company" {
-  name        = "critical_company"
+  name        = "${var.project_name}-critical_company"
   description = "critical company security group"
 }
 

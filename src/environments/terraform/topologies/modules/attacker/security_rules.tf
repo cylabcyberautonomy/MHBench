@@ -1,6 +1,6 @@
 ### Attacker Network Rules ###
 resource "openstack_networking_secgroup_v2" "attacker" {
-  name        = "attacker"
+  name        = "${var.name_prefix}-attacker"
   description = "attacker security group"
 }
 

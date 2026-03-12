@@ -1,11 +1,11 @@
 ### Management rules, all servers need SSH access from management network ###
 resource "openstack_networking_secgroup_v2" "manage_freedom" {
-  name        = "manage_freedom"
+  name        = "${var.name_prefix}-manage_freedom"
   description = ""
 }
 
 resource "openstack_networking_secgroup_v2" "talk_to_manage" {
-  name                 = "talk_to_manage"
+  name                 = "${var.name_prefix}-talk_to_manage"
   description          = ""
   delete_default_rules = true
 }
