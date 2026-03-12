@@ -1,6 +1,6 @@
 ### Webserver Network Rules ###
 resource "openstack_networking_secgroup_v2" "dev_hosts" {
-  name        = "Dev hosts group"
+  name        = "${var.project_name}-Dev hosts group"
   description = ""
 }
 

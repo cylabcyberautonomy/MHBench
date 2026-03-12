@@ -5,6 +5,8 @@ module "perry_manager" {
   key_name = var.perry_key_name
   images   = var.images
   flavors  = var.flavors
+  compute_node_hostnames = var.compute_node_hostnames
+  name_prefix            = var.project_name
 }
 
 module "attacker" {
@@ -13,29 +15,31 @@ module "attacker" {
   key_name           = var.perry_key_name
   images             = var.images
   flavors            = var.flavors
+  compute_node_hostnames = var.compute_node_hostnames
+  name_prefix            = var.project_name
 }
 
 resource "openstack_networking_network_v2" "employee_one_network" {
-  name           = "employee_one_network"
+  name           = "${var.project_name}-employee_one_network"
   admin_state_up = "true"
   description    = "Employee network one"
 }
 
 resource "openstack_networking_network_v2" "employee_two_network" {
-  name           = "employee_two_network"
+  name           = "${var.project_name}-employee_two_network"
   admin_state_up = "true"
   description    = "Employee network two"
 }
 
 resource "openstack_networking_network_v2" "OT_network" {
-  name           = "OT_network"
+  name           = "${var.project_name}-OT_network"
   admin_state_up = "true"
   description    = "The corporate network with critical data"
 }
 
 ### Subnets ###
 resource "openstack_networking_subnet_v2" "employee_one_subnet" {
-  name            = "employee_one_subnet"
+  name            = "${var.project_name}-employee_one_subnet"
   network_id      = openstack_networking_network_v2.employee_one_network.id
   cidr            = "192.168.200.0/24"
   ip_version      = 4
@@ -43,7 +47,7 @@ resource "openstack_networking_subnet_v2" "employee_one_subnet" {
 }
 
 resource "openstack_networking_subnet_v2" "employee_two_subnet" {
-  name            = "employee_two_subnet"
+  name            = "${var.project_name}-employee_two_subnet"
   network_id      = openstack_networking_network_v2.employee_two_network.id
   cidr            = "192.168.201.0/24"
   ip_version      = 4
@@ -51,7 +55,7 @@ resource "openstack_networking_subnet_v2" "employee_two_subnet" {
 }
 
 resource "openstack_networking_subnet_v2" "OT_subnet" {
-  name            = "OT_subnet"
+  name            = "${var.project_name}-OT_subnet"
   network_id      = openstack_networking_network_v2.OT_network.id
   cidr            = "192.168.203.0/24"
   ip_version      = 4
@@ -79,7 +83,7 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_dat
 ### Employee 1 Subnet Hosts ###
 resource "openstack_compute_instance_v2" "employee_one" {
   count       = 10
-  name        = "employee_A_${count.index}"
+  name        = "${var.project_name}-employee_A_${count.index}"
   image_name  = var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
@@ -89,9 +93,18 @@ resource "openstack_compute_instance_v2" "employee_one" {
   ]
 
   network {
-    name = "employee_one_network"
+    name = "${var.project_name}-employee_one_network"
     // sequential ips
     fixed_ip_v4 = "192.168.200.${count.index + 10}"
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
@@ -99,7 +112,7 @@ resource "openstack_compute_instance_v2" "employee_one" {
 
 resource "openstack_compute_instance_v2" "manage_employee_one" {
   count       = 1
-  name        = "manage_A_${count.index}"
+  name        = "${var.project_name}-manage_A_${count.index}"
   image_name  = var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
@@ -109,7 +122,16 @@ resource "openstack_compute_instance_v2" "manage_employee_one" {
   ]
 
   network {
-    name = "employee_one_network"
+    name = "${var.project_name}-employee_one_network"
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
@@ -118,7 +140,7 @@ resource "openstack_compute_instance_v2" "manage_employee_one" {
 ### Corporate Subnet Hosts ###
 resource "openstack_compute_instance_v2" "employee_two" {
   count       = 10
-  name        = "employee_B_${count.index}"
+  name        = "${var.project_name}-employee_B_${count.index}"
   image_name  = var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
@@ -128,8 +150,17 @@ resource "openstack_compute_instance_v2" "employee_two" {
   ]
 
   network {
-    name        = "employee_two_network"
+    name        = "${var.project_name}-employee_two_network"
     fixed_ip_v4 = "192.168.201.${count.index + 10}"
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
@@ -137,7 +168,7 @@ resource "openstack_compute_instance_v2" "employee_two" {
 
 resource "openstack_compute_instance_v2" "manage_employee_two" {
   count       = 1
-  name        = "manage_B_${count.index}"
+  name        = "${var.project_name}-manage_B_${count.index}"
   image_name  = var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
@@ -147,7 +178,16 @@ resource "openstack_compute_instance_v2" "manage_employee_two" {
   ]
 
   network {
-    name = "employee_two_network"
+    name = "${var.project_name}-employee_two_network"
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
@@ -155,7 +195,7 @@ resource "openstack_compute_instance_v2" "manage_employee_two" {
 
 resource "openstack_compute_instance_v2" "ot_sensors" {
   count       = 20
-  name        = "sensor_${count.index}"
+  name        = "${var.project_name}-sensor_${count.index}"
   image_name  = var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
@@ -165,8 +205,17 @@ resource "openstack_compute_instance_v2" "ot_sensors" {
   ]
 
   network {
-    name        = "ot_network"
+    name        = "${var.project_name}-ot_network"
     fixed_ip_v4 = "192.168.203.${count.index + 10}"
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.OT_subnet]
@@ -174,7 +223,7 @@ resource "openstack_compute_instance_v2" "ot_sensors" {
 
 resource "openstack_compute_instance_v2" "ot_hosts" {
   count       = 5
-  name        = "control_host_${count.index}"
+  name        = "${var.project_name}-control_host_${count.index}"
   image_name  = var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
@@ -184,8 +233,17 @@ resource "openstack_compute_instance_v2" "ot_hosts" {
   ]
 
   network {
-    name        = "ot_network"
+    name        = "${var.project_name}-ot_network"
     fixed_ip_v4 = "192.168.203.${count.index + 50}"
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.OT_subnet]

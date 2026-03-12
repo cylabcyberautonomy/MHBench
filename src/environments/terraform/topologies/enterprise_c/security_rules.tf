@@ -1,6 +1,6 @@
 ### Employee One Network Rules ###
 resource "openstack_networking_secgroup_v2" "employee_one_group" {
-  name        = "employee_one_group"
+  name        = "${var.project_name}-employee_one_group"
   description = "employee one security group"
 }
 
@@ -26,7 +26,7 @@ resource "openstack_networking_secgroup_rule_v2" "employee_one_tcp_out" {
 
 ### Employee Two Network Rules ###
 resource "openstack_networking_secgroup_v2" "employee_two_group" {
-  name        = "employee_two_group"
+  name        = "${var.project_name}-employee_two_group"
   description = "employee two security group"
 }
 
@@ -55,7 +55,7 @@ resource "openstack_networking_secgroup_rule_v2" "employee_two_tcp_out" {
 
 ### OT Network ###
 resource "openstack_networking_secgroup_v2" "ot_group" {
-  name        = "ot_group"
+  name        = "${var.project_name}-ot_group"
   description = "OT network security group"
 }
 

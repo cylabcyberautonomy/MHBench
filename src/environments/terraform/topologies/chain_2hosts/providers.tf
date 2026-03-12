@@ -58,6 +58,12 @@ variable "flavors" {
   })
 }
 
+variable "compute_node_hostnames" {
+  type        = list(string)
+  description = "Physical compute node hostnames to pin VMs to via Nova scheduler hints. Empty list = no pinning."
+  default     = []
+}
+
 # Configure the OpenStack Provider
 provider "openstack" {
   user_name   = var.openstack_username

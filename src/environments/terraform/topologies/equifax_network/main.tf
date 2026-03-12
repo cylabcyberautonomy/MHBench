@@ -8,31 +8,31 @@ module "manage_rules" {
 }
 
 resource "openstack_networking_network_v2" "manage_network" {
-  name           = "manage_network"
+  name           = "${var.project_name}-manage_network"
   admin_state_up = "true"
 }
 
 resource "openstack_networking_network_v2" "webserver_network" {
-  name           = "webserver_network"
+  name           = "${var.project_name}-webserver_network"
   admin_state_up = "true"
   description    = "The external webserver network"
 }
 
 resource "openstack_networking_network_v2" "critical_company_network" {
-  name           = "critical_company_network"
+  name           = "${var.project_name}-critical_company_network"
   admin_state_up = "true"
   description    = "The corporate network with critical data"
 }
 
 resource "openstack_networking_network_v2" "attacker_network" {
-  name           = "attacker_network"
+  name           = "${var.project_name}-attacker_network"
   admin_state_up = "true"
   description    = "The attacker network"
 }
 
 ### Subnets ###
 resource "openstack_networking_subnet_v2" "manage" {
-  name            = "manage"
+  name            = "${var.project_name}-manage"
   network_id      = openstack_networking_network_v2.manage_network.id
   cidr            = "192.168.198.0/24"
   ip_version      = 4
@@ -40,7 +40,7 @@ resource "openstack_networking_subnet_v2" "manage" {
 }
 
 resource "openstack_networking_subnet_v2" "webserver_subnet" {
-  name            = "webserver_network"
+  name            = "${var.project_name}-webserver_network"
   network_id      = openstack_networking_network_v2.webserver_network.id
   cidr            = "192.168.200.0/24"
   ip_version      = 4
@@ -48,7 +48,7 @@ resource "openstack_networking_subnet_v2" "webserver_subnet" {
 }
 
 resource "openstack_networking_subnet_v2" "critical_company_subnet" {
-  name            = "critical_company_network"
+  name            = "${var.project_name}-critical_company_network"
   network_id      = openstack_networking_network_v2.critical_company_network.id
   cidr            = "192.168.201.0/24"
   ip_version      = 4
@@ -56,7 +56,7 @@ resource "openstack_networking_subnet_v2" "critical_company_subnet" {
 }
 
 resource "openstack_networking_subnet_v2" "attacker_subnet" {
-  name            = "attacker_network"
+  name            = "${var.project_name}-attacker_network"
   network_id      = openstack_networking_network_v2.attacker_network.id
   cidr            = "192.168.202.0/24"
   ip_version      = 4
@@ -66,7 +66,7 @@ resource "openstack_networking_subnet_v2" "attacker_subnet" {
 ### Ports ###
 # Host Ports
 resource "openstack_networking_port_v2" "manage_port_host" {
-  name               = "manage_port_host"
+  name               = "${var.project_name}-manage_port_host"
   network_id         = openstack_networking_network_v2.manage_network.id
   admin_state_up     = "true"
   security_group_ids = ["${openstack_networking_secgroup_v2.manage_freedom.id}"]
@@ -77,7 +77,7 @@ resource "openstack_networking_port_v2" "manage_port_host" {
 }
 
 resource "openstack_networking_port_v2" "webserver_A_port" {
-  name           = "webserver_A_port"
+  name           = "${var.project_name}-webserver_A_port"
   network_id     = openstack_networking_network_v2.webserver_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -92,7 +92,7 @@ resource "openstack_networking_port_v2" "webserver_A_port" {
 }
 
 resource "openstack_networking_port_v2" "webserver_B_port" {
-  name           = "webserver_B_port"
+  name           = "${var.project_name}-webserver_B_port"
   network_id     = openstack_networking_network_v2.webserver_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -107,7 +107,7 @@ resource "openstack_networking_port_v2" "webserver_B_port" {
 }
 
 resource "openstack_networking_port_v2" "webserver_C_port" {
-  name           = "webserver_C_port"
+  name           = "${var.project_name}-webserver_C_port"
   network_id     = openstack_networking_network_v2.webserver_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -122,7 +122,7 @@ resource "openstack_networking_port_v2" "webserver_C_port" {
 }
 
 resource "openstack_networking_port_v2" "employee_A_port" {
-  name           = "employee_A_port"
+  name           = "${var.project_name}-employee_A_port"
   network_id     = openstack_networking_network_v2.critical_company_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -137,7 +137,7 @@ resource "openstack_networking_port_v2" "employee_A_port" {
 }
 
 resource "openstack_networking_port_v2" "employee_B_port" {
-  name           = "employee_B_port"
+  name           = "${var.project_name}-employee_B_port"
   network_id     = openstack_networking_network_v2.critical_company_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -152,7 +152,7 @@ resource "openstack_networking_port_v2" "employee_B_port" {
 }
 
 resource "openstack_networking_port_v2" "database_A_port" {
-  name           = "database_A_port"
+  name           = "${var.project_name}-database_A_port"
   network_id     = openstack_networking_network_v2.critical_company_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -167,7 +167,7 @@ resource "openstack_networking_port_v2" "database_A_port" {
 }
 
 resource "openstack_networking_port_v2" "database_B_port" {
-  name           = "database_B_port"
+  name           = "${var.project_name}-database_B_port"
   network_id     = openstack_networking_network_v2.critical_company_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -182,7 +182,7 @@ resource "openstack_networking_port_v2" "database_B_port" {
 }
 
 resource "openstack_networking_port_v2" "attacker_port" {
-  name           = "attacker_port"
+  name           = "${var.project_name}-attacker_port"
   network_id     = openstack_networking_network_v2.attacker_network.id
   admin_state_up = "true"
   security_group_ids = [
@@ -198,7 +198,7 @@ resource "openstack_networking_port_v2" "attacker_port" {
 
 ### Routers ###
 resource "openstack_networking_router_v2" "router_external" {
-  name                = "router_external"
+  name                = "${var.project_name}-router_external"
   admin_state_up      = true
   external_network_id = data.openstack_networking_network_v2.external_network.id
 }
@@ -228,13 +228,22 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_att
 
 ### Management Host ###
 resource "openstack_compute_instance_v2" "manage_host" {
-  name        = "manage_host"
+  name        = "${var.project_name}-manage_host"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
 
   network {
     port = openstack_networking_port_v2.manage_port_host.id
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 }
 
@@ -249,7 +258,7 @@ resource "openstack_networking_floatingip_associate_v2" "fip_manage" {
 
 ### Webserver Subnet Hosts ###
 resource "openstack_compute_instance_v2" "webserver_A" {
-  name        = "webserver_A"
+  name        = "${var.project_name}-webserver_A"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
@@ -257,10 +266,19 @@ resource "openstack_compute_instance_v2" "webserver_A" {
   network {
     port = openstack_networking_port_v2.webserver_A_port.id
   }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
+  }
 }
 
 resource "openstack_compute_instance_v2" "webserver_B" {
-  name        = "webserver_B"
+  name        = "${var.project_name}-webserver_B"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
@@ -268,10 +286,19 @@ resource "openstack_compute_instance_v2" "webserver_B" {
   network {
     port = openstack_networking_port_v2.webserver_B_port.id
   }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
+  }
 }
 
 resource "openstack_compute_instance_v2" "webserver_C" {
-  name        = "webserver_C"
+  name        = "${var.project_name}-webserver_C"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
@@ -279,11 +306,20 @@ resource "openstack_compute_instance_v2" "webserver_C" {
   network {
     port = openstack_networking_port_v2.webserver_C_port.id
   }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
+  }
 }
 
 ### Corporate Subnet Hosts ###
 resource "openstack_compute_instance_v2" "employee_A" {
-  name        = "employee_A"
+  name        = "${var.project_name}-employee_A"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
@@ -291,10 +327,19 @@ resource "openstack_compute_instance_v2" "employee_A" {
   network {
     port = openstack_networking_port_v2.employee_A_port.id
   }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
+  }
 }
 
 resource "openstack_compute_instance_v2" "employee_B" {
-  name        = "employee_B"
+  name        = "${var.project_name}-employee_B"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
@@ -302,10 +347,19 @@ resource "openstack_compute_instance_v2" "employee_B" {
   network {
     port = openstack_networking_port_v2.employee_B_port.id
   }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
+  }
 }
 
 resource "openstack_compute_instance_v2" "database_A" {
-  name        = "database_A"
+  name        = "${var.project_name}-database_A"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
@@ -313,10 +367,19 @@ resource "openstack_compute_instance_v2" "database_A" {
   network {
     port = openstack_networking_port_v2.database_A_port.id
   }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
+  }
 }
 
 resource "openstack_compute_instance_v2" "database_B" {
-  name        = "database_B"
+  name        = "${var.project_name}-database_B"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
@@ -324,16 +387,34 @@ resource "openstack_compute_instance_v2" "database_B" {
   network {
     port = openstack_networking_port_v2.database_B_port.id
   }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
+  }
 }
 
 ### Attacker Subnet Hosts ###
 resource "openstack_compute_instance_v2" "attacker" {
-  name        = "attacker"
+  name        = "${var.project_name}-attacker"
   image_name  = var.images.ubuntu_pip
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
 
   network {
     port = openstack_networking_port_v2.attacker_port.id
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 }

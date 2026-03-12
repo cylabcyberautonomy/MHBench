@@ -4,6 +4,8 @@ module "perry_manager" {
   key_name = var.perry_key_name
   images   = var.images
   flavors  = var.flavors
+  compute_node_hostnames = var.compute_node_hostnames
+  name_prefix            = var.project_name
 }
 
 module "attacker" {
@@ -12,17 +14,19 @@ module "attacker" {
   key_name           = var.perry_key_name
   images             = var.images
   flavors            = var.flavors
+  compute_node_hostnames = var.compute_node_hostnames
+  name_prefix            = var.project_name
 }
 
 resource "openstack_networking_network_v2" "ring_network" {
-  name           = "ring_network"
+  name           = "${var.project_name}-ring_network"
   admin_state_up = "true"
   description    = "Ring"
 }
 
 ### Subnets ###
 resource "openstack_networking_subnet_v2" "ring_subnet" {
-  name            = "ring_subnet"
+  name            = "${var.project_name}-ring_subnet"
   network_id      = openstack_networking_network_v2.ring_network.id
   cidr            = "192.168.200.0/24"
   ip_version      = 4
@@ -41,7 +45,7 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_com
 ### Ring Subnet Hosts ###
 resource "openstack_compute_instance_v2" "ring_host" {
   count       = 25
-  name        = "host_${count.index}"
+  name        = "${var.project_name}-host_${count.index}"
   image_name  = var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
@@ -51,9 +55,18 @@ resource "openstack_compute_instance_v2" "ring_host" {
   ]
 
   network {
-    name = "ring_network"
+    name = "${var.project_name}-ring_network"
     // sequential ips
     fixed_ip_v4 = "192.168.200.${count.index + 10}"
+  }
+
+  dynamic "scheduler_hints" {
+    for_each = length(var.compute_node_hostnames) > 0 ? [1] : []
+    content {
+      additional_properties = {
+        "force_hosts" = join(",", var.compute_node_hostnames)
+      }
+    }
   }
 
   depends_on = [openstack_networking_subnet_v2.ring_subnet]

@@ -1,6 +1,6 @@
 ### Webserver Network Rules ###
 resource "openstack_networking_secgroup_v2" "webserver_secgroup" {
-  name        = "webserver"
+  name        = "${var.project_name}-webserver"
   description = "Webserver security group"
 }
 
@@ -27,7 +27,7 @@ resource "openstack_networking_secgroup_rule_v2" "webserver_tcp_out" {
 
 ### Employee A Rules ###
 resource "openstack_networking_secgroup_v2" "employee_a_secgroup" {
-  name        = "employee_a_secgroup"
+  name        = "${var.project_name}-employee_a_secgroup"
   description = "Employee A security group"
 }
 
@@ -49,7 +49,7 @@ resource "openstack_networking_secgroup_rule_v2" "employee_a_egress_rules" {
 
 ### Employee B Rules ###
 resource "openstack_networking_secgroup_v2" "employee_b_secgroup" {
-  name        = "employee_b_secgroup"
+  name        = "${var.project_name}-employee_b_secgroup"
   description = "Employee B security group"
 }
 
@@ -71,7 +71,7 @@ resource "openstack_networking_secgroup_rule_v2" "employee_b_egress_rules" {
 
 ### Database Rules ###
 resource "openstack_networking_secgroup_v2" "database_secgroup" {
-  name        = "database_secgroup"
+  name        = "${var.project_name}-database_secgroup"
   description = "Database security group"
 }
 
