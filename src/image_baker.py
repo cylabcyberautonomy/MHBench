@@ -85,9 +85,11 @@ class ImageBaker:
     def __init__(
         self,
         openstack_conn: Connection,
+        availability_zone: str = "",
         bake_script: str = _BAKE_SCRIPT,
     ) -> None:
         self.openstack_conn = openstack_conn
+        self.availability_zone = availability_zone
         self.bake_script = bake_script
 
     # ------------------------------------------------------------------
@@ -126,6 +128,7 @@ class ImageBaker:
         logger.info(
             f"[BAKE] {spec.type_name}: uploaded as '{spec.baked_image_name}'."
         )
+        self._precache_on_az_nodes(spec.baked_image_name)
 
     def bake_all(self, specs: list[VmBakeSpec]) -> None:
         """Bake every spec in *specs*, skipping those already present."""
@@ -202,3 +205,43 @@ class ImageBaker:
             container_format="bare",
             wait=True,
         )
+
+    def _precache_on_az_nodes(self, image_name: str) -> None:
+        """Tell every compute node in the environment's host aggregate to
+        pre-cache *image_name* from Glance onto its local SSD.
+
+        Uses the Nova image-cache API (microversion 2.81, OpenStack Yoga+).
+        The AZ name is the same as the aggregate's availability_zone field
+        because Perry creates one aggregate per slot/AZ.  If no AZ is
+        configured, or the matching aggregate cannot be found, the step is
+        skipped with a warning rather than failing the bake.
+        """
+        if not self.availability_zone:
+            return
+
+        image = self.openstack_conn.get_image(image_name)
+        if image is None:
+            logger.warning(f"[BAKE] Pre-cache: image '{image_name}' not found in Glance, skipping.")
+            return
+
+        aggregates = list(self.openstack_conn.compute.aggregates())
+        target = next(
+            (a for a in aggregates if a.availability_zone == self.availability_zone),
+            None,
+        )
+        if target is None:
+            logger.warning(
+                f"[BAKE] Pre-cache: no host aggregate found for AZ '{self.availability_zone}', skipping."
+            )
+            return
+
+        logger.info(
+            f"[BAKE] Pre-caching '{image_name}' on aggregate '{target.name}' "
+            f"(AZ '{self.availability_zone}') ..."
+        )
+        self.openstack_conn.compute.post(
+            f"/os-aggregates/{target.id}/images",
+            json={"cache": [{"id": image.id}]},
+            microversion="2.81",
+        )
+        logger.info(f"[BAKE] Pre-cache request sent for '{image_name}'.")
