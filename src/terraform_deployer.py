@@ -142,7 +142,7 @@ class TerraformDeployer:
             # 1. Bake a qcow2 image for every VM type that has not been baked
             #    yet, then upload the result to OpenStack Glance so that
             #    Terraform can reference it by name.
-            baker = ImageBaker(self.openstack_conn)
+            baker = ImageBaker(self.openstack_conn, availability_zone=self.config.availability_zone)
             baker.bake_all(bake_specs)
 
             # 2. Update the in-memory image config so that Terraform picks up
