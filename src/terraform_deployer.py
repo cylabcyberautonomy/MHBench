@@ -144,11 +144,9 @@ class TerraformDeployer:
             #    Terraform can reference it by name.
             baker = ImageBaker(self.openstack_conn, availability_zone=self.config.availability_zone)
             baker.bake_all(bake_specs)
+            return
 
-            # 2. Update the in-memory image config so that Terraform picks up
-            #    the baked image names when deploying the topology.
-            self._apply_baked_images_to_config(bake_specs)
-
+        # ── Legacy in-place Ansible flow (no bake specs defined) ─────────
         if setup_network:
             self.deploy_topology()
             time.sleep(5)
@@ -156,27 +154,12 @@ class TerraformDeployer:
         self.find_management_server()
         self.parse_network()
 
-        if setup_hosts and not bake_specs:
-            # ── Legacy in-place Ansible flow (no bake specs defined) ─────
+        if setup_hosts:
             self.setup_base_packages()
             self.compile_setup()
 
-        # Save per-instance snapshots (captures network configuration / IPs).
         self.clean_snapshots()
         self.save_all_snapshots()
-
-    def _apply_baked_images_to_config(self, specs: list[VmBakeSpec]) -> None:
-        """Write baked image names back into the in-memory terraform config.
-
-        Terraform reads image names from config.terraform_config.images.
-        After baking we update each relevant field so that deploy_topology()
-        passes the baked image names as Terraform vars.
-        """
-        images = self.config.terraform_config.images
-        for spec in specs:
-            field_name = f"{spec.type_name}_baked"
-            if hasattr(images, field_name):
-                setattr(images, field_name, spec.baked_image_name)
 
     def setup_base_packages(self):
         self.ansible_runner.run_playbook(CheckIfHostUp(self.attacker_host.ip))
@@ -197,19 +180,38 @@ class TerraformDeployer:
         )
 
     def setup(self):
-        self.find_management_server()
-        self.parse_network()
-        # Load snapshots
-        self.load_all_snapshots()
-        time.sleep(10)
-        while self.get_error_hosts():
-            self.rebuild_error_hosts()
+        bake_specs = self.vm_bake_specs()
 
-        if self.vm_bake_specs():
-            # Run per-host setup playbooks registered in each bake spec, then
-            # any cross-VM / environment-specific dynamic setup.
+        if bake_specs:
+            # ── Bake-image flow ──────────────────────────────────────────
+            # Deploy the Terraform topology using baked images, then run all
+            # dynamic Ansible setup (per-host factories + cross-VM setup).
+            # Snapshots are not used — every trial re-deploys from the baked
+            # image, which already has all static software installed.
+            self._apply_baked_images_to_config(bake_specs)
+            self.deploy_topology()
+            time.sleep(5)
+            self.find_management_server()
+            self.parse_network()
             self._run_host_setup_playbooks()
             self.compile_setup()
+        else:
+            # ── Legacy snapshot flow ──────────────────────────────────────
+            self.find_management_server()
+            self.parse_network()
+            self.load_all_snapshots()
+            time.sleep(10)
+            while self.get_error_hosts():
+                self.rebuild_error_hosts()
+
+    def _apply_baked_images_to_config(self, specs: list[VmBakeSpec]) -> None:
+        """Write baked image names into the in-memory Terraform config so that
+        deploy_topology() passes them as Terraform variables."""
+        images = self.config.terraform_config.images
+        for spec in specs:
+            field_name = f"{spec.type_name}_baked"
+            if hasattr(images, field_name):
+                setattr(images, field_name, spec.baked_image_name)
 
     def _run_host_setup_playbooks(self) -> None:
         """For each live host, run the setup playbook factories registered in

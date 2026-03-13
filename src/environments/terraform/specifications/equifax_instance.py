@@ -10,6 +10,7 @@ from ansible.deployment_instance import (
 )
 from ansible.common import CreateUser
 from ansible.goals import AddData
+from ansible.defender import StartServices
 from src.terraform_deployer import TerraformDeployer
 from src.legacy_models import Network, Subnet
 from src.utility.openstack_processor import get_hosts_on_subnet
@@ -106,6 +107,10 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_webserver_baked",
                 bake_extra_vars=defender_vars,
+                # Start telemetry services once the VM is live.
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                ],
             ),
             VmBakeSpec(
                 type_name="database",
@@ -115,8 +120,8 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_database_baked",
                 bake_extra_vars=defender_vars,
-                # Per-instance setup: create the DB admin user and seed data.
                 setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
                     lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
                     lambda host: AddData(
                         host.ip,
@@ -133,8 +138,8 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_employee_baked",
                 bake_extra_vars=defender_vars,
-                # Per-instance setup: create the employee user account.
                 setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
                     lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
                 ],
             ),
@@ -145,6 +150,8 @@ class EquifaxInstance(TerraformDeployer):
                     "ansible/bake_playbooks/attacker.yml",
                 ],
                 baked_image_name="mhbench_attacker_baked",
+                # Kali ships with a large disk already — no resize needed.
+                disk_size_gb=0,
                 # Caldera agent install is deferred to runtime_setup() because
                 # it requires the live C2 server IP.
             ),
@@ -156,6 +163,9 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_manage_host_baked",
                 bake_extra_vars=defender_vars,
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                ],
             ),
         ]
 
