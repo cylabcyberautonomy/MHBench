@@ -10,6 +10,6 @@
 
 - import_playbook: ../deployment_instance/install_base_packages/install_base_packages.yml
 
-- import_playbook: ../defender/sysflow/install_sysflow.yml
+- import_playbook: ../defender/sysflow/install_sysflow_nostart.yml
 
-- import_playbook: ../defender/falco/install_falco.yml
+- import_playbook: ../defender/falco/install_falco_nostart.yml
