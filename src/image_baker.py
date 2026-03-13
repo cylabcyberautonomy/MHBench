@@ -71,6 +71,11 @@ class VmBakeSpec:
     setup_playbook_factories: list[Callable[[Host], AnsiblePlaybook | None]] = field(
         default_factory=list
     )
+    # Extra GB to add to the qcow2 before booting. Ubuntu cloud images ship at
+    # ~2-3 GB; adding 3 GB brings them to ~5 GB which is enough for SysFlow,
+    # Falco, and vulnerability tooling. Set to 0 to skip resizing entirely
+    # (e.g. Kali, which already ships at ~25 GB).
+    disk_size_gb: int = 3
 
 
 class ImageBaker:
@@ -121,6 +126,7 @@ class ImageBaker:
             combined_playbook = os.path.join(workdir, "combined.yml")
 
             self._download_image(spec.base_image_name, qcow2_path)
+            self._resize_image(qcow2_path, spec.disk_size_gb)
             self._write_combined_playbook(spec.bake_playbooks, combined_playbook)
             self._run_bake_script(spec, qcow2_path, combined_playbook)
             self._upload_image(spec.baked_image_name, qcow2_path)
@@ -152,6 +158,22 @@ class ImageBaker:
             for chunk in self.openstack_conn.image.download_image(image.id):
                 fh.write(chunk)
         logger.info(f"[BAKE] Download complete → {dest_path}")
+
+    def _resize_image(self, qcow2_path: str, size_gb: int) -> None:
+        """Add *size_gb* GB to the qcow2 to give bake playbooks enough space.
+
+        Set size_gb=0 in the VmBakeSpec to skip resizing (e.g. for Kali which
+        already ships with a large enough disk). Uses a relative +NGB so it
+        always grows the disk regardless of the base image's starting size.
+        Cloud-init's growpart module expands the root partition on first boot.
+        """
+        if size_gb == 0:
+            return
+        logger.info(f"[BAKE] Expanding disk by +{size_gb}G ...")
+        subprocess.run(
+            ["qemu-img", "resize", qcow2_path, f"+{size_gb}G"],
+            check=True,
+        )
 
     def _write_combined_playbook(
         self, playbook_paths: list[str], dest: str
