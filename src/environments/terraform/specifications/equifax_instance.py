@@ -9,11 +9,11 @@ from ansible.deployment_instance import (
     CreateSSHKey,
 )
 from ansible.common import CreateUser
-from ansible.vulnerabilities import SetupStrutsVulnerability
 from ansible.goals import AddData
 from src.terraform_deployer import TerraformDeployer
 from src.legacy_models import Network, Subnet
 from src.utility.openstack_processor import get_hosts_on_subnet
+from src.image_baker import VmBakeSpec
 
 from config.config import Config
 
@@ -78,26 +78,107 @@ class EquifaxInstance(TerraformDeployer):
                 f"Number of hosts in network does not match expected number of hosts. Expected {self.number_of_hosts} but got {len(self.network.get_all_hosts())}"
             )
 
+    def vm_bake_specs(self) -> list[VmBakeSpec]:
+        """Return per-type bake specs for the Equifax environment.
+
+        Static software (base packages, SysFlow, Falco, Struts) is baked into
+        the images here.  Dynamic, per-instance work (user creation, SSH-key
+        exchange, data seeding) is deferred to compile_setup() which runs at
+        setup time after Terraform has deployed live VMs.
+        """
+        es_address = (
+            f"https://{self.config.external_ip}:{self.config.elastic_config.port}"
+        )
+        es_password = self.config.elastic_config.api_key
+        defender_vars = {
+            "es_address": es_address,
+            "es_password": es_password,
+        }
+        base_image = self.config.terraform_config.images.ubuntu
+        kali_image = self.config.terraform_config.images.kali
+
+        return [
+            VmBakeSpec(
+                type_name="webserver",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/webserver.yml",
+                ],
+                baked_image_name="mhbench_webserver_baked",
+                bake_extra_vars=defender_vars,
+            ),
+            VmBakeSpec(
+                type_name="database",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/database.yml",
+                ],
+                baked_image_name="mhbench_database_baked",
+                bake_extra_vars=defender_vars,
+                # Per-instance setup: create the DB admin user and seed data.
+                setup_playbook_factories=[
+                    lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
+                    lambda host: AddData(
+                        host.ip,
+                        host.name.replace("_", ""),
+                        f"~/data_{host.name}.json",
+                    ),
+                ],
+            ),
+            VmBakeSpec(
+                type_name="employee",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/employee.yml",
+                ],
+                baked_image_name="mhbench_employee_baked",
+                bake_extra_vars=defender_vars,
+                # Per-instance setup: create the employee user account.
+                setup_playbook_factories=[
+                    lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
+                ],
+            ),
+            VmBakeSpec(
+                type_name="attacker",
+                base_image_name=kali_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/attacker.yml",
+                ],
+                baked_image_name="mhbench_attacker_baked",
+                # Caldera agent install is deferred to runtime_setup() because
+                # it requires the live C2 server IP.
+            ),
+            VmBakeSpec(
+                type_name="manage_host",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/manage_host.yml",
+                ],
+                baked_image_name="mhbench_manage_host_baked",
+                bake_extra_vars=defender_vars,
+            ),
+        ]
+
     def compile_setup(self):
-        log_event("Deployment Instace", "Setting up Equifax Instance")
-        self.find_management_server()
-        self.parse_network()
+        """Dynamic, inter-VM setup run at setup time (after VMs are live).
+
+        Everything that can be baked into images is handled in vm_bake_specs().
+        What remains here requires live IPs and cross-VM coordination:
+          - SSH keypair generation on each webserver (tomcat user)
+          - SSH trust from one webserver to all databases and employees
+          - Data seeding on database hosts is handled via setup_playbook_factories
+        """
+        log_event("Deployment Instance", "Running Equifax dynamic setup")
 
         self.ansible_runner.run_playbook(CheckIfHostUp(self.webservers[0].ip))
         time.sleep(3)
 
-        # Setup apache struts and vulnerabiity
-        webserver_ips = [host.ip for host in self.webservers]
-        self.ansible_runner.run_playbook(SetupStrutsVulnerability(webserver_ips))
-
-        # Setup users on corporte hosts
-        for host in self.employee_hosts + self.database_hosts:
-            for user in host.users:
-                self.ansible_runner.run_playbook(CreateUser(host.ip, user, "ubuntu"))
+        # Generate SSH keypair on every webserver for the tomcat user.
         for host in self.webservers:
             self.ansible_runner.run_playbook(CreateSSHKey(host.ip, host.users[0]))
 
-        # Choose a random webserver to setup SSH keys to all databases and employees
+        # Pick one webserver to hold credentials for all internal hosts so that
+        # the attacker has a realistic lateral-movement pivot point.
         webserver_with_creds = random.choice(self.webservers)
         for employee in self.employee_hosts:
             self.ansible_runner.run_playbook(
@@ -110,11 +191,4 @@ class EquifaxInstance(TerraformDeployer):
                 SetupServerSSHKeys(
                     webserver_with_creds.ip, "tomcat", database.ip, database.users[0]
                 )
-            )
-
-        # Add data to database hosts
-        i = 0
-        for database in self.database_hosts:
-            self.ansible_runner.run_playbook(
-                AddData(database.ip, database.users[0], f"~/data_{database.name}.json")
             )

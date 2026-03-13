@@ -1,0 +1,9 @@
+---
+# database.yml — Bake playbook for database VMs.
+#
+# Installs the common Ubuntu base toolchain (base packages, SysFlow, Falco).
+# Per-instance setup (user creation, data seeding) is deferred to
+# compile_setup() at setup time because those steps depend on instance-specific
+# names and live IPs.
+
+- import_playbook: ubuntu_base.yml

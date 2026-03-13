@@ -1,0 +1,9 @@
+---
+# attacker.yml — Bake playbook for the attacker (Kali) VM.
+#
+# Installs the Kali Linux repository and top-10 tool suite so the attacker VM
+# boots ready for operations without any further package installation.
+# The Caldera C2 agent is NOT baked in — it requires the live Caldera server
+# IP at install time and is therefore installed at setup time via runtime_setup().
+
+- import_playbook: ../deployment_instance/install_base_packages/kali_packages.yml

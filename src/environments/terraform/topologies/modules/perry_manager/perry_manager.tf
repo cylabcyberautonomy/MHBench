@@ -8,9 +8,14 @@ variable "key_name" {
 }
 variable "images" {
   type = object({
-    ubuntu     = string
-    ubuntu_pip = string
-    kali       = string
+    ubuntu            = string
+    ubuntu_pip        = string
+    kali              = string
+    webserver_baked   = optional(string, "")
+    database_baked    = optional(string, "")
+    employee_baked    = optional(string, "")
+    attacker_baked    = optional(string, "")
+    manage_host_baked = optional(string, "")
   })
 }
 variable "flavors" {
@@ -86,7 +91,7 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_ext
 ### Host ###
 resource "openstack_compute_instance_v2" "manage_host" {
   name        = "${var.name_prefix}-manage_host"
-  image_name  = var.images.ubuntu
+  image_name  = var.images.manage_host_baked != "" ? var.images.manage_host_baked : var.images.ubuntu
   flavor_name = var.flavors.small
   key_pair    = var.key_name
   security_groups = [

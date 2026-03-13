@@ -1,0 +1,8 @@
+---
+# manage_host.yml — Bake playbook for the Perry management/gateway VM.
+#
+# Installs the common Ubuntu base toolchain.  The management host acts as the
+# SSH jump host and network gateway; no additional software beyond the base
+# is baked in here.
+
+- import_playbook: ubuntu_base.yml

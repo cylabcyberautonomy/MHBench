@@ -19,6 +19,7 @@ from ansible.deployment_instance import (
 from ansible.caldera import InstallAttacker
 from ansible.defender import InstallSysFlow
 from ansible.defender.falco.install_falco import InstallFalco
+from src.image_baker import ImageBaker, VmBakeSpec
 
 from src.utility.logging import get_logger
 
@@ -61,6 +62,29 @@ class TerraformDeployer:
 
         self.flags = {}
         self.root_flags = {}
+
+    # ------------------------------------------------------------------
+    # Image-bake API — override in subclasses to enable the bake flow.
+    # ------------------------------------------------------------------
+
+    def vm_bake_specs(self) -> list[VmBakeSpec]:
+        """Return one VmBakeSpec per logical VM type for this environment.
+
+        Each spec declares:
+          • which base Glance image to start from
+          • which Ansible playbooks to apply during baking (in order)
+          • the name under which the finished image is stored in Glance
+          • optional extra Ansible vars (e.g. Elasticsearch credentials)
+          • optional per-host setup playbook factories for setup time
+
+        When this returns a non-empty list, compile() uses ImageBaker to
+        bake each type (skipping any that already exist in Glance) and then
+        deploys Terraform using the baked images.  When it returns an empty
+        list the old in-place Ansible flow is used instead (backward compat).
+
+        Override this in environment subclasses that want the bake flow.
+        """
+        return []
 
     # Protofunction, this is where you define everything needed to setup the instance
     def compile_setup(self):
@@ -111,22 +135,48 @@ class TerraformDeployer:
         teardown_helper.delete_security_groups(conn)
 
     def compile(self, setup_network: bool = True, setup_hosts: bool = True):
+        bake_specs = self.vm_bake_specs()
+
+        if bake_specs:
+            # ── New bake-image flow ──────────────────────────────────────
+            # 1. Bake a qcow2 image for every VM type that has not been baked
+            #    yet, then upload the result to OpenStack Glance so that
+            #    Terraform can reference it by name.
+            baker = ImageBaker(self.openstack_conn)
+            baker.bake_all(bake_specs)
+
+            # 2. Update the in-memory image config so that Terraform picks up
+            #    the baked image names when deploying the topology.
+            self._apply_baked_images_to_config(bake_specs)
+
         if setup_network:
-            # Redeploy entire network
             self.deploy_topology()
             time.sleep(5)
 
         self.find_management_server()
         self.parse_network()
 
-        if setup_hosts:
-            # Setup instances
+        if setup_hosts and not bake_specs:
+            # ── Legacy in-place Ansible flow (no bake specs defined) ─────
             self.setup_base_packages()
             self.compile_setup()
 
-        # Save instance
+        # Save per-instance snapshots (captures network configuration / IPs).
         self.clean_snapshots()
         self.save_all_snapshots()
+
+    def _apply_baked_images_to_config(self, specs: list[VmBakeSpec]) -> None:
+        """Write baked image names back into the in-memory terraform config.
+
+        Terraform reads image names from config.terraform_config.images.
+        After baking we update each relevant field so that deploy_topology()
+        passes the baked image names as Terraform vars.
+        """
+        images = self.config.terraform_config.images
+        for spec in specs:
+            field_name = f"{spec.type_name}_baked"
+            if hasattr(images, field_name):
+                setattr(images, field_name, spec.baked_image_name)
 
     def setup_base_packages(self):
         self.ansible_runner.run_playbook(CheckIfHostUp(self.attacker_host.ip))
@@ -154,6 +204,34 @@ class TerraformDeployer:
         time.sleep(10)
         while self.get_error_hosts():
             self.rebuild_error_hosts()
+
+        if self.vm_bake_specs():
+            # Run per-host setup playbooks registered in each bake spec, then
+            # any cross-VM / environment-specific dynamic setup.
+            self._run_host_setup_playbooks()
+            self.compile_setup()
+
+    def _run_host_setup_playbooks(self) -> None:
+        """For each live host, run the setup playbook factories registered in
+        the matching VmBakeSpec (matched by host-name prefix == type_name)."""
+        specs_by_type = {spec.type_name: spec for spec in self.vm_bake_specs()}
+        for host in self.network.get_all_hosts():
+            # Match the host to a spec by the longest matching type_name prefix.
+            matched_spec = None
+            for type_name, spec in specs_by_type.items():
+                # Strip project-name prefix (e.g. "perry-webserver_0" → "webserver")
+                bare_name = host.name.split("-", 1)[-1] if "-" in host.name else host.name
+                if bare_name.startswith(type_name) and (
+                    matched_spec is None
+                    or len(type_name) > len(matched_spec.type_name)
+                ):
+                    matched_spec = spec
+            if matched_spec is None:
+                continue
+            for factory in matched_spec.setup_playbook_factories:
+                playbook = factory(host)
+                if playbook is not None:
+                    self.ansible_runner.run_playbook(playbook)
 
     def deploy_topology(self):
         self.teardown()
