@@ -294,7 +294,7 @@ fi
 
 # ─── Graceful shutdown ──────────────────────────────────────────────────────
 echo "==> Shutting down VM gracefully..."
-ssh $SSH_OPTS -i "$SSH_KEY" -p "$SSH_PORT" "${VM_USER}@localhost" \
+ssh $SSH_OPTS -o BatchMode=yes -i "$SSH_KEY" -p "$SSH_PORT" "${VM_USER}@localhost" \
     "sudo shutdown -h now" 2>/dev/null || true
 
 # Wait for QEMU to exit
