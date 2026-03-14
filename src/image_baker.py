@@ -15,6 +15,7 @@ environment's compile_setup() which is called at setup time.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -71,11 +72,11 @@ class VmBakeSpec:
     setup_playbook_factories: list[Callable[[Host], AnsiblePlaybook | None]] = field(
         default_factory=list
     )
-    # Extra GB to add to the qcow2 before booting. Ubuntu cloud images ship at
-    # ~2-3 GB; adding 3 GB brings them to ~5 GB which is enough for SysFlow,
-    # Falco, and vulnerability tooling. Set to 0 to skip resizing entirely
-    # (e.g. Kali, which already ships at ~25 GB).
-    disk_size_gb: int = 3
+    # When set, ImageBaker looks up this OpenStack flavor's disk size and
+    # resizes the image to exactly that size before baking. When None, no
+    # resize is performed (e.g. for Kali which already ships with a large disk).
+    # Use the actual OpenStack flavor name (e.g. "m1.small"), not the logical key.
+    flavor_name: str | None = None
 
 
 class ImageBaker:
@@ -126,7 +127,9 @@ class ImageBaker:
             combined_playbook = os.path.join(workdir, "combined.yml")
 
             self._download_image(spec.base_image_name, qcow2_path)
-            self._resize_image(qcow2_path, spec.disk_size_gb)
+            if spec.flavor_name is not None:
+                disk_gb = self._get_flavor_disk_gb(spec.flavor_name)
+                self._resize_image(qcow2_path, disk_gb)
             self._write_combined_playbook(spec.bake_playbooks, combined_playbook)
             self._run_bake_script(spec, qcow2_path, combined_playbook)
             self._upload_image(spec.baked_image_name, qcow2_path)
@@ -157,21 +160,48 @@ class ImageBaker:
         with open(dest_path, "wb") as fh:
             for chunk in self.openstack_conn.image.download_image(image.id):
                 fh.write(chunk)
-        logger.info(f"[BAKE] Download complete → {dest_path}")
+        print(f"[BAKE] Download complete → {dest_path}")
+
+    def _get_flavor_disk_gb(self, flavor_name: str) -> int:
+        """Return the disk size in GB for the named OpenStack flavor."""
+        flavor = self.openstack_conn.compute.find_flavor(flavor_name)
+        if flavor is None:
+            raise RuntimeError(
+                f"[BAKE] Flavor '{flavor_name}' not found in OpenStack."
+            )
+        return flavor.disk
 
     def _resize_image(self, qcow2_path: str, size_gb: int) -> None:
-        """Add *size_gb* GB to the qcow2 to give bake playbooks enough space.
+        """Resize the qcow2 to exactly *size_gb* GB.
 
-        Set size_gb=0 in the VmBakeSpec to skip resizing (e.g. for Kali which
-        already ships with a large enough disk). Uses a relative +NGB so it
-        always grows the disk regardless of the base image's starting size.
-        Cloud-init's growpart module expands the root partition on first boot.
+        Skips resizing if the image is already the target size. Raises
+        RuntimeError if the image is larger than the target (OpenStack would
+        reject it, and shrinking a qcow2 risks data loss).
+        Cloud-init's growpart module expands the root partition on first boot
+        to fill the new disk size.
         """
-        if size_gb == 0:
+        result = subprocess.run(
+            ["qemu-img", "info", "--output=json", qcow2_path],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        current_bytes = json.loads(result.stdout)["virtual-size"]
+        target_bytes = size_gb * 1024 ** 3
+
+        if current_bytes == target_bytes:
+            print(f"[BAKE] Disk already {size_gb}G — skipping resize.")
             return
-        logger.info(f"[BAKE] Expanding disk by +{size_gb}G ...")
+        if current_bytes > target_bytes:
+            raise RuntimeError(
+                f"[BAKE] Image virtual size ({current_bytes / 1024**3:.1f}G) "
+                f"exceeds target flavor disk size ({size_gb}G). "
+                "Shrinking a qcow2 is not supported."
+            )
+
+        print(f"[BAKE] Resizing disk to {size_gb}G ...")
         subprocess.run(
-            ["qemu-img", "resize", qcow2_path, f"+{size_gb}G"],
+            ["qemu-img", "resize", qcow2_path, f"{size_gb}G"],
             check=True,
         )
 

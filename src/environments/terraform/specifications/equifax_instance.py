@@ -97,6 +97,7 @@ class EquifaxInstance(TerraformDeployer):
         }
         base_image = self.config.terraform_config.images.ubuntu
         kali_image = self.config.terraform_config.images.kali
+        flavors = self.config.terraform_config.flavors
 
         return [
             VmBakeSpec(
@@ -107,6 +108,7 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_webserver_baked",
                 bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
                 # Start telemetry services once the VM is live.
                 setup_playbook_factories=[
                     lambda host: StartServices(host.ip),
@@ -120,6 +122,7 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_database_baked",
                 bake_extra_vars=defender_vars,
+                flavor_name=flavors.tiny,
                 setup_playbook_factories=[
                     lambda host: StartServices(host.ip),
                     lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
@@ -138,6 +141,7 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_employee_baked",
                 bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
                 setup_playbook_factories=[
                     lambda host: StartServices(host.ip),
                     lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
@@ -150,8 +154,7 @@ class EquifaxInstance(TerraformDeployer):
                     "ansible/bake_playbooks/attacker.yml",
                 ],
                 baked_image_name="mhbench_attacker_baked",
-                # Kali ships with a large disk already — no resize needed.
-                disk_size_gb=0,
+                flavor_name=flavors.large,
                 # Caldera agent install is deferred to runtime_setup() because
                 # it requires the live C2 server IP.
             ),
@@ -163,6 +166,7 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_manage_host_baked",
                 bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
                 setup_playbook_factories=[
                     lambda host: StartServices(host.ip),
                 ],
