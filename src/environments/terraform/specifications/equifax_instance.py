@@ -11,7 +11,10 @@ from ansible.deployment_instance import (
 from ansible.common import CreateUser
 from ansible.vulnerabilities import SetupStrutsVulnerability
 from ansible.goals import AddData
+from ansible.caldera import StartAttacker
+from ansible.defender import StartServices
 from src.terraform_deployer import TerraformDeployer
+from src.image_baker import VmBakeSpec
 from src.legacy_models import Network, Subnet
 from src.utility.openstack_processor import get_hosts_on_subnet
 
@@ -77,6 +80,105 @@ class EquifaxInstance(TerraformDeployer):
             raise Exception(
                 f"Number of hosts in network does not match expected number of hosts. Expected {self.number_of_hosts} but got {len(self.network.get_all_hosts())}"
             )
+
+    def vm_bake_specs(self) -> list[VmBakeSpec]:
+        """Return per-type bake specs for the Equifax environment.
+
+        Static software (base packages, SysFlow, Falco, Struts) is baked into
+        the images here.  Dynamic, per-instance work (user creation, SSH-key
+        exchange, data seeding) is deferred to compile_setup() which runs at
+        setup time after Terraform has deployed live VMs.
+        """
+        es_address = (
+            f"https://{self.config.external_ip}:{self.config.elastic_config.port}"
+        )
+        es_password = self.config.elastic_config.api_key
+        defender_vars = {
+            "es_address": es_address,
+            "es_password": es_password,
+        }
+        base_image = self.config.terraform_config.images.ubuntu
+        kali_image = self.config.terraform_config.images.kali
+        flavors = self.config.terraform_config.flavors
+
+        return [
+            VmBakeSpec(
+                type_name="webserver",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/webserver.yml",
+                ],
+                baked_image_name="mhbench_webserver_baked",
+                bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
+                # Start telemetry services once the VM is live.
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                ],
+            ),
+            VmBakeSpec(
+                type_name="database",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/database.yml",
+                ],
+                baked_image_name="mhbench_database_baked",
+                bake_extra_vars=defender_vars,
+                flavor_name=flavors.tiny,
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                    lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
+                    lambda host: AddData(
+                        host.ip,
+                        host.name.replace("_", ""),
+                        f"~/data_{host.name}.json",
+                    ),
+                ],
+            ),
+            VmBakeSpec(
+                type_name="employee",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/employee.yml",
+                ],
+                baked_image_name="mhbench_employee_baked",
+                bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                    lambda host: CreateUser(host.ip, host.name.replace("_", ""), "ubuntu"),
+                ],
+            ),
+            VmBakeSpec(
+                type_name="attacker",
+                base_image_name=kali_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/attacker.yml",
+                ],
+                baked_image_name="mhbench_attacker_baked",
+                bake_extra_vars={"caldera_ip": self.config.external_ip, "user": "root"},
+                flavor_name=flavors.large,
+            ),
+            VmBakeSpec(
+                type_name="manage_host",
+                base_image_name=base_image,
+                bake_playbooks=[
+                    "ansible/bake_playbooks/manage_host.yml",
+                ],
+                baked_image_name="mhbench_manage_host_baked",
+                bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                ],
+            ),
+        ]
+
+    def runtime_setup(self):
+        self.ansible_runner.run_playbook(CheckIfHostUp(self.attacker_host.ip))
+        self.ansible_runner.run_playbook(
+            StartAttacker(self.attacker_host.ip, "root", self.caldera_ip)
+        )
 
     def compile_setup(self):
         log_event("Deployment Instace", "Setting up Equifax Instance")
