@@ -7,6 +7,11 @@ class TerraformImages(BaseModel):
     ubuntu: str = "Ubuntu20"
     ubuntu_pip: str = "ubuntu20_pip"
     kali: str = "kali-cloud"
+    webserver_baked: str = "mhbench_webserver_baked"
+    database_baked: str = "mhbench_database_baked"
+    employee_baked: str = "mhbench_employee_baked"
+    attacker_baked: str = "mhbench_attacker_baked"
+    manage_host_baked: str = "mhbench_manage_host_baked"
 
 
 class TerraformFlavors(BaseModel):
