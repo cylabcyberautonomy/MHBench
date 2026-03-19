@@ -5,4 +5,4 @@
 # SSH jump host and network gateway; no additional software beyond the base
 # is baked in here.
 
-#- import_playbook: ubuntu_base.yml
+- import_playbook: ubuntu_base.yml

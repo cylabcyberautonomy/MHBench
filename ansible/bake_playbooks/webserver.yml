@@ -6,6 +6,6 @@
 # the moment Terraform boots it; no further Ansible is needed for static
 # software installation.
 
-#- import_playbook: ubuntu_base.yml
+- import_playbook: ubuntu_base.yml
 
 - import_playbook: ../vulnerabilities/apacheStruts/setupStruts.yml

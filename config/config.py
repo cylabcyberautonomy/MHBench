@@ -7,11 +7,14 @@ class TerraformImages(BaseModel):
     ubuntu: str = "Ubuntu20"
     ubuntu_pip: str = "ubuntu20_pip"
     kali: str = "kali-cloud"
-    webserver_baked: str = "mhbench_webserver_baked"
-    database_baked: str = "mhbench_database_baked"
-    employee_baked: str = "mhbench_employee_baked"
-    attacker_baked: str = "mhbench_attacker_baked"
-    manage_host_baked: str = "mhbench_manage_host_baked"
+    # Per-type baked image names produced by the compile bake step.
+    # An empty string means the type has not been baked yet; Terraform falls
+    # back to the base ubuntu / kali image in that case.
+    webserver_baked: str = ""
+    database_baked: str = ""
+    employee_baked: str = ""
+    attacker_baked: str = ""
+    manage_host_baked: str = ""
 
 
 class TerraformFlavors(BaseModel):

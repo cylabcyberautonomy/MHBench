@@ -42,9 +42,16 @@ variable "perry_key_name" {
 
 variable "images" {
   type = object({
-    ubuntu     = string
-    ubuntu_pip = string
-    kali       = string
+    ubuntu            = string
+    ubuntu_pip        = string
+    kali              = string
+    # Baked image names produced by the MHBench compile step.
+    # Empty string means "not yet baked — fall back to the base image".
+    webserver_baked   = optional(string, "")
+    database_baked    = optional(string, "")
+    employee_baked    = optional(string, "")
+    attacker_baked    = optional(string, "")
+    manage_host_baked = optional(string, "")
   })
 }
 

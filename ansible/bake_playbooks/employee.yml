@@ -5,4 +5,4 @@
 # deferred to compile_setup() because usernames are derived from each VM's
 # OpenStack instance name which is only known after Terraform runs.
 
-#- import_playbook: ubuntu_base.yml
+- import_playbook: ubuntu_base.yml

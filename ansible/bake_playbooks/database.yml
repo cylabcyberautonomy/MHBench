@@ -6,4 +6,4 @@
 # compile_setup() at setup time because those steps depend on instance-specific
 # names and live IPs.
 
-#- import_playbook: ubuntu_base.yml
+- import_playbook: ubuntu_base.yml

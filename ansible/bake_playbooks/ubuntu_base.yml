@@ -1,0 +1,15 @@
+---
+# ubuntu_base.yml — Bake playbook for all Ubuntu-based VM types.
+#
+# Installs the common toolchain (base packages, SysFlow telemetry, Falco
+# runtime security) that every non-Kali host needs.
+#
+# This playbook is imported by type-specific bake playbooks (webserver.yml,
+# database.yml, etc.) rather than run directly.  When invoked via
+# bake-image.sh the host variable is set to "bake_target" automatically.
+
+- import_playbook: ../deployment_instance/install_base_packages/install_base_packages.yml
+
+- import_playbook: ../defender/sysflow/install_sysflow_nostart.yml
+
+- import_playbook: ../defender/falco/install_falco_nostart.yml

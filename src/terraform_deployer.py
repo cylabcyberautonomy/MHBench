@@ -19,6 +19,7 @@ from ansible.deployment_instance import (
 )
 from ansible.defender import InstallSysFlow
 from ansible.defender.falco.install_falco import InstallFalco
+from src.image_baker import ImageBaker, VmBakeSpec
 
 from src.utility.logging import get_logger
 
@@ -61,6 +62,29 @@ class TerraformDeployer:
 
         self.flags = {}
         self.root_flags = {}
+
+    # ------------------------------------------------------------------
+    # Image-bake API — override in subclasses to enable the bake flow.
+    # ------------------------------------------------------------------
+
+    def vm_bake_specs(self) -> list[VmBakeSpec]:
+        """Return one VmBakeSpec per logical VM type for this environment.
+
+        Each spec declares:
+          • which base Glance image to start from
+          • which Ansible playbooks to apply during baking (in order)
+          • the name under which the finished image is stored in Glance
+          • optional extra Ansible vars (e.g. Elasticsearch credentials)
+          • optional per-host setup playbook factories for setup time
+
+        When this returns a non-empty list, compile() uses ImageBaker to
+        bake each type (skipping any that already exist in Glance) and then
+        deploys Terraform using the baked images.  When it returns an empty
+        list the old in-place Ansible flow is used instead (backward compat).
+
+        Override this in environment subclasses that want the bake flow.
+        """
+        return []
 
     # Protofunction, this is where you define everything needed to setup the instance
     def compile_setup(self):
@@ -132,7 +156,6 @@ class TerraformDeployer:
 
         # ── Legacy in-place Ansible flow (no bake specs defined) ─────────
         if setup_network:
-            # Redeploy entire network
             self.deploy_topology()
             time.sleep(5)
 
@@ -140,11 +163,9 @@ class TerraformDeployer:
         self.parse_network()
 
         if setup_hosts:
-            # Setup instances
             self.setup_base_packages()
             self.compile_setup()
 
-        # Save instance
         self.clean_snapshots()
         self.save_all_snapshots()
 

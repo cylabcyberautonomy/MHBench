@@ -9,7 +9,6 @@ from ansible.deployment_instance import (
     CreateSSHKey,
 )
 from ansible.common import CreateUser
-from ansible.vulnerabilities import SetupStrutsVulnerability
 from ansible.goals import AddData
 from ansible.caldera import StartAttacker
 from ansible.defender import StartServices
@@ -17,6 +16,7 @@ from src.terraform_deployer import TerraformDeployer
 from src.image_baker import VmBakeSpec
 from src.legacy_models import Network, Subnet
 from src.utility.openstack_processor import get_hosts_on_subnet
+from src.image_baker import VmBakeSpec
 
 from config.config import Config
 
@@ -181,25 +181,25 @@ class EquifaxInstance(TerraformDeployer):
         )
 
     def compile_setup(self):
-        log_event("Deployment Instace", "Setting up Equifax Instance")
-        self.find_management_server()
-        self.parse_network()
+        """Dynamic, inter-VM setup run at setup time (after VMs are live).
+
+        Everything that can be baked into images is handled in vm_bake_specs().
+        What remains here requires live IPs and cross-VM coordination:
+          - SSH keypair generation on each webserver (tomcat user)
+          - SSH trust from one webserver to all databases and employees
+          - Data seeding on database hosts is handled via setup_playbook_factories
+        """
+        log_event("Deployment Instance", "Running Equifax dynamic setup")
 
         self.ansible_runner.run_playbook(CheckIfHostUp(self.webservers[0].ip))
         time.sleep(3)
 
-        # Setup apache struts and vulnerabiity
-        webserver_ips = [host.ip for host in self.webservers]
-        self.ansible_runner.run_playbook(SetupStrutsVulnerability(webserver_ips))
-
-        # Setup users on corporte hosts
-        for host in self.employee_hosts + self.database_hosts:
-            for user in host.users:
-                self.ansible_runner.run_playbook(CreateUser(host.ip, user, "ubuntu"))
+        # Generate SSH keypair on every webserver for the tomcat user.
         for host in self.webservers:
             self.ansible_runner.run_playbook(CreateSSHKey(host.ip, host.users[0]))
 
-        # Choose a random webserver to setup SSH keys to all databases and employees
+        # Pick one webserver to hold credentials for all internal hosts so that
+        # the attacker has a realistic lateral-movement pivot point.
         webserver_with_creds = random.choice(self.webservers)
         for employee in self.employee_hosts:
             self.ansible_runner.run_playbook(
@@ -212,11 +212,4 @@ class EquifaxInstance(TerraformDeployer):
                 SetupServerSSHKeys(
                     webserver_with_creds.ip, "tomcat", database.ip, database.users[0]
                 )
-            )
-
-        # Add data to database hosts
-        i = 0
-        for database in self.database_hosts:
-            self.ansible_runner.run_playbook(
-                AddData(database.ip, database.users[0], f"~/data_{database.name}.json")
             )
