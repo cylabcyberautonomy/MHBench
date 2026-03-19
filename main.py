@@ -155,7 +155,8 @@ def setup(ctx, skip_network: bool):
 @click.pass_context
 @click.option("--skip_network", help="Skip network setup", is_flag=True)
 @click.option("--skip_host", help="Skip host setup", is_flag=True)
-def compile(ctx, skip_network: bool, skip_host: bool):
+@click.option("--keep-cache", help="Keep baked qcow2 in .bake-cache/ so a failed upload can be retried without re-baking", is_flag=True)
+def compile(ctx, skip_network: bool, skip_host: bool, keep_cache: bool):
     notifier = _make_notifier(ctx.obj.config)
     env_type = ctx.obj.env_type
     if notifier:
@@ -164,7 +165,7 @@ def compile(ctx, skip_network: bool, skip_host: bool):
     try:
         click.echo("Compiling the environment (can take several hours)...")
         if ctx.obj.environment is not None:
-            ctx.obj.environment.compile(not skip_network, not skip_host)
+            ctx.obj.environment.compile(not skip_network, not skip_host, keep_cache=keep_cache)
         else:
             ctx.obj.orchestrator.compile_environment(ctx.obj.topology)
         if notifier:
