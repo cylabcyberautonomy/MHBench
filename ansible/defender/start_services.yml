@@ -1,0 +1,34 @@
+---
+# start_services.yml — Start and enable SysFlow and Falco on a live host.
+#
+# Run at setup time (after Terraform has deployed the baked image) so that
+# telemetry collection begins as soon as the environment is ready.
+# These services are installed but NOT started during the bake step so that
+# no stale state is captured inside the image.
+
+- name: Start telemetry and runtime-security services
+  hosts: "{{ host }}"
+  become: yes
+
+  tasks:
+    - name: Wait for host to come up
+      wait_for_connection:
+        delay: 0
+        timeout: 120
+
+    - name: Start sysflow
+      command: sysflow start
+      ignore_errors: yes
+
+    - name: Enable and start falco
+      systemd:
+        name: falco
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Enable and start falcosidekick
+      systemd:
+        name: falcosidekick
+        state: started
+        enabled: yes
