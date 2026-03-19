@@ -1,5 +1,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from src.image_baker import VmBakeSpec
 
 import openstack.compute.v2.server
 import openstack.image.v2.image
@@ -16,7 +17,6 @@ from ansible.deployment_instance import (
     InstallBasePackages,
     CreateSSHKey,
 )
-from ansible.caldera import InstallAttacker
 from ansible.defender import InstallSysFlow
 from ansible.defender.falco.install_falco import InstallFalco
 
@@ -67,24 +67,7 @@ class TerraformDeployer:
         return
 
     def runtime_setup(self):
-        install_trials = 5
-        errors = 0
-
-        for _ in range(install_trials):
-            try:
-                attacker_host = self.attacker_host
-                self.ansible_runner.run_playbook(
-                    InstallAttacker(attacker_host.ip, "root", self.caldera_ip)
-                )
-                break
-            except Exception:
-                errors += 1
-                time.sleep(30)
-
-        if errors == install_trials:
-            raise Exception(
-                f"Failed to install attacker host after {install_trials} trials"
-            )
+        pass
 
     def parse_network(self):
         return
@@ -94,24 +77,57 @@ class TerraformDeployer:
 
         conn = self.openstack_conn
 
+        print("Deleting instances...")
         teardown_helper.delete_instances(conn)
-        while conn.list_servers():
+        while True:
+            servers = conn.list_servers()
+            if not servers:
+                break
+            print(f"  Waiting for {len(servers)} server(s) to delete: {[s.name for s in servers]}")
             time.sleep(0.5)
+        print("Instances deleted.")
 
+        print("Deleting floating IPs...")
         teardown_helper.delete_floating_ips(conn)
-        while conn.list_floating_ips():
+        while True:
+            fips = conn.list_floating_ips()
+            if not fips:
+                break
+            print(f"  Waiting for {len(fips)} floating IP(s) to delete.")
             time.sleep(0.5)
+        print("Floating IPs deleted.")
 
+        print("Deleting routers...")
         teardown_helper.delete_routers(conn)
-        while conn.list_routers():
+        while True:
+            routers = conn.list_routers()
+            if not routers:
+                break
+            print(f"  Waiting for {len(routers)} router(s) to delete: {[r.name for r in routers]}")
             time.sleep(0.5)
+        print("Routers deleted.")
 
-        teardown_helper.delete_ports(conn)
+        print("Deleting subnets...")
         teardown_helper.delete_subnets(conn)
+        print("Deleting networks...")
         teardown_helper.delete_networks(conn)
+        print("Deleting security groups...")
         teardown_helper.delete_security_groups(conn)
+        print("Teardown complete.")
 
-    def compile(self, setup_network: bool = True, setup_hosts: bool = True):
+    def compile(self, setup_network: bool = True, setup_hosts: bool = True, keep_cache: bool = False):
+        bake_specs = self.vm_bake_specs()
+
+        if bake_specs:
+            # ── New bake-image flow ──────────────────────────────────────
+            # 1. Bake a qcow2 image for every VM type that has not been baked
+            #    yet, then upload the result to OpenStack Glance so that
+            #    Terraform can reference it by name.
+            baker = ImageBaker(self.openstack_conn, availability_zone=self.config.availability_zone)
+            baker.bake_all(bake_specs, keep_cache=keep_cache)
+            return
+
+        # ── Legacy in-place Ansible flow (no bake specs defined) ─────────
         if setup_network:
             # Redeploy entire network
             self.deploy_topology()
@@ -148,15 +164,77 @@ class TerraformDeployer:
         )
 
     def setup(self):
-        self.find_management_server()
-        self.parse_network()
-        # Load snapshots
-        self.load_all_snapshots()
-        time.sleep(10)
-        while self.get_error_hosts():
-            self.rebuild_error_hosts()
+        bake_specs = self.vm_bake_specs()
+
+        if bake_specs:
+            # ── Bake-image flow ──────────────────────────────────────────
+            # Deploy the Terraform topology using baked images, then run all
+            # dynamic Ansible setup (per-host factories + cross-VM setup).
+            # Snapshots are not used — every trial re-deploys from the baked
+            # image, which already has all static software installed.
+            print("[setup] Applying baked image names to Terraform config")
+            self._apply_baked_images_to_config(bake_specs)
+            print("[setup] Deploying Terraform topology")
+            self.deploy_topology()
+            print("[setup] Waiting 5s for VMs to settle")
+            time.sleep(5)
+            print("[setup] Finding management server")
+            self.find_management_server()
+            print("[setup] Parsing network")
+            self.parse_network()
+            print("[setup] Running per-host setup playbooks")
+            self._run_host_setup_playbooks()
+            print("[setup] Running compile_setup (dynamic/cross-VM setup)")
+            self.compile_setup()
+            print("[setup] Done")
+        else:
+            # ── Legacy snapshot flow ──────────────────────────────────────
+            print("[setup] Legacy flow: finding management server")
+            self.find_management_server()
+            print("[setup] Parsing network")
+            self.parse_network()
+            print("[setup] Loading snapshots")
+            self.load_all_snapshots()
+            time.sleep(10)
+            while self.get_error_hosts():
+                self.rebuild_error_hosts()
+            print("[setup] Done")
+
+    def _apply_baked_images_to_config(self, specs: list[VmBakeSpec]) -> None:
+        """Write baked image names into the in-memory Terraform config so that
+        deploy_topology() passes them as Terraform variables."""
+        images = self.config.terraform_config.images
+        for spec in specs:
+            field_name = f"{spec.type_name}_baked"
+            if hasattr(images, field_name):
+                setattr(images, field_name, spec.baked_image_name)
+
+    def _run_host_setup_playbooks(self) -> None:
+        """For each live host, run the setup playbook factories registered in
+        the matching VmBakeSpec (matched by host-name prefix == type_name)."""
+        specs_by_type = {spec.type_name: spec for spec in self.vm_bake_specs()}
+        for host in self.network.get_all_hosts():
+            # Match the host to a spec by the longest matching type_name prefix.
+            matched_spec = None
+            for type_name, spec in specs_by_type.items():
+                # Strip project-name prefix (e.g. "perry-webserver_0" → "webserver")
+                bare_name = host.name.split("-", 1)[-1] if "-" in host.name else host.name
+                if bare_name.startswith(type_name) and (
+                    matched_spec is None
+                    or len(type_name) > len(matched_spec.type_name)
+                ):
+                    matched_spec = spec
+            if matched_spec is None:
+                continue
+            for factory in matched_spec.setup_playbook_factories:
+                playbook = factory(host)
+                if playbook is not None:
+                    self.ansible_runner.run_playbook(playbook)
 
     def deploy_topology(self):
+        bake_specs = self.vm_bake_specs()
+        if bake_specs:
+            self._apply_baked_images_to_config(bake_specs)
         self.teardown()
         deploy_network(self.topology, self.config)
 
