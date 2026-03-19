@@ -1,0 +1,11 @@
+---
+# attacker.yml — Bake playbook for the attacker (Kali) VM.
+#
+# Installs the Kali Linux repository and top-10 tool suite, then downloads the
+# Caldera sandcat agent binary from the C2 server (caldera_ip must be passed as
+# a bake_extra_var).  The agent is NOT started here — starting happens at
+# runtime via StartAttacker / start_attacker.yml each trial.
+
+- import_playbook: ../deployment_instance/install_base_packages/kali_packages.yml
+
+- import_playbook: ../caldera/bake_attacker.yml
