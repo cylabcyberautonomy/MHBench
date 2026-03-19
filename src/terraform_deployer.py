@@ -1,6 +1,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.image_baker import VmBakeSpec
+from src.image_baker import VmBakeSpec, ImageBaker
 
 import openstack.compute.v2.server
 import openstack.image.v2.image
