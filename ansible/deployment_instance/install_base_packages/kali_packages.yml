@@ -46,4 +46,12 @@
           - python3-pip
           - nikto
           - unzip
+          - ethtool
         state: present
+
+    - name: Disable virtio VLAN hardware filtering to prevent boot hang
+      become: true
+      copy:
+        dest: /etc/udev/rules.d/99-disable-vlan-filter.rules
+        content: |
+          ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth*", RUN+="/sbin/ethtool -K $name rx-vlan-filter off"
