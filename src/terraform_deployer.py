@@ -69,6 +69,9 @@ class TerraformDeployer:
     def runtime_setup(self):
         pass
 
+    def vm_bake_specs(self) -> list[VmBakeSpec]:
+        return []
+
     def parse_network(self):
         return
 
