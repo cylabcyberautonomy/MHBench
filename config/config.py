@@ -86,6 +86,7 @@ class Config(BaseModel):
     external_ip: str
     experiment_timeout_minutes: int
     availability_zone: str = ""  # Nova AZ to pin VMs to (created by Perry per slot)
+    c2c_port: int = 8888         # host port of the Incalmo C2 container for this slot
 
     @property
     def terraform_vars(self) -> dict:
