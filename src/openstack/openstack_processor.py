@@ -13,8 +13,13 @@ def get_hosts_on_subnet(
 ):
     hosts = []
 
+    project_name = conn.auth.get("project_name", "") if conn.auth else ""
+    project_prefix = f"{project_name}-" if project_name else ""
+
     for server in conn.compute.servers():  # type: ignore
-        if host_name_prefix and not server.name.startswith(host_name_prefix):
+        if project_prefix and not server.name.startswith(project_prefix):
+            continue
+        if host_name_prefix and host_name_prefix not in server.name:
             continue
 
         for network, network_attrs in server.addresses.items():
