@@ -2,14 +2,14 @@ import time
 
 
 def find_server_by_name(conn, name):
-    for server in conn.compute.servers():
+    for server in conn.compute.servers(project_id=conn.current_project_id):
         if server.name == name:
             return server
     return None
 
 
 def find_server_by_ip(conn, ip):
-    for server in conn.compute.servers():
+    for server in conn.compute.servers(project_id=conn.current_project_id):
         for network, network_attrs in server.addresses.items():
             ip_addresses = [x["addr"] for x in network_attrs]
             if ip in ip_addresses:
@@ -36,7 +36,7 @@ def shutdown_server_by_ip(conn, ip):
 def get_decoy_servers(openstack_conn):
     """Retrieve all decoy servers on OpenStack."""
     decoys = []
-    for server in openstack_conn.list_servers():
+    for server in openstack_conn.list_servers(filters={"project_id": openstack_conn.current_project_id}):
         # get image
         image = openstack_conn.get_image(server.image.id)
         if "decoy" in image.name:
