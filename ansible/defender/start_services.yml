@@ -9,6 +9,7 @@
 - name: Start telemetry and runtime-security services
   hosts: "{{ host }}"
   become: yes
+  gather_facts: no
 
   tasks:
     - name: Wait for host to come up
