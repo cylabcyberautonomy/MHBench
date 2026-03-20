@@ -61,7 +61,10 @@ class AnsibleRunner:
                         cancel_callback=lambda: None,
                         quiet=self.quiet,
                         verbosity=self.verbosity,
-                        envvars={"ANSIBLE_SSH_CONTROL_PATH_DIR": control_path_dir},
+                        envvars={
+                            "ANSIBLE_SSH_CONTROL_PATH_DIR": control_path_dir,
+                            "ANSIBLE_HOST_KEY_CHECKING": "False",
+                        },
                     )
                 if ansible_result.status == "successful":
                     break
@@ -98,7 +101,9 @@ class AnsibleRunner:
                         )
                         thread, runner = ansible_runner.run_async(
                             extravars=playbook_full_params,
-                            private_data_dir=self.ansible_dir,
+                            private_data_dir=self._runner_tmp.name,
+                            project_dir=path.abspath(self.ansible_dir),
+                            inventory=path.abspath(path.join(self.ansible_dir, "inventory")),
                             playbook=playbook.name,
                             quiet=False,
                         )
