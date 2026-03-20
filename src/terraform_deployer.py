@@ -29,14 +29,21 @@ logger = get_logger()
 def find_manage_server(
     conn,
 ) -> tuple[openstack.compute.v2.server.Server | None, str | None]:
-    """Finds any server with a floating IP and returns the first one found."""
+    """Finds any server with a floating IP and returns the first one found.
+
+    Nova ignores project_id filters for admin tokens, so filter client-side
+    by the project name prefix embedded in every server's name (e.g. "perry_slot0-").
+    """
+    project_name = conn.auth.get("project_name", "") if conn.auth else ""
+    project_prefix = f"{project_name}-" if project_name else ""
+
     for server in conn.compute.servers():
+        if project_prefix and not server.name.startswith(project_prefix):
+            continue
         for network, network_attrs in server.addresses.items():
             for addr_info in network_attrs:
-                # Check if this address is a floating IP
                 if addr_info.get("OS-EXT-IPS:type") == "floating":
-                    ip = addr_info["addr"]
-                    return server, ip
+                    return server, addr_info["addr"]
     return None, None
 
 
@@ -106,34 +113,39 @@ class TerraformDeployer:
 
         print("Deleting instances...")
         teardown_helper.delete_instances(conn)
+        project_prefix = self.config.openstack_config.project_name + "-"
         while True:
-            servers = conn.list_servers()
+            servers = [s for s in conn.list_servers() if s.name.startswith(project_prefix)]
             if not servers:
                 break
             print(f"  Waiting for {len(servers)} server(s) to delete: {[s.name for s in servers]}")
             time.sleep(0.5)
         print("Instances deleted.")
+        # Give Neutron a moment to release ports after Nova finishes deletions.
+        time.sleep(5)
 
         print("Deleting floating IPs...")
         teardown_helper.delete_floating_ips(conn)
         while True:
-            fips = conn.list_floating_ips()
+            fips = conn.list_floating_ips(filters={"project_id": conn.current_project_id})
             if not fips:
                 break
             print(f"  Waiting for {len(fips)} floating IP(s) to delete.")
             time.sleep(0.5)
         print("Floating IPs deleted.")
 
+        print("Deleting ports...")
+        teardown_helper.delete_ports(conn)
+
         print("Deleting routers...")
         teardown_helper.delete_routers(conn)
         while True:
-            routers = conn.list_routers()
+            routers = conn.list_routers(filters={"project_id": conn.current_project_id})
             if not routers:
                 break
             print(f"  Waiting for {len(routers)} router(s) to delete: {[r.name for r in routers]}")
             time.sleep(0.5)
         print("Routers deleted.")
-
         print("Deleting subnets...")
         teardown_helper.delete_subnets(conn)
         print("Deleting networks...")
@@ -196,10 +208,11 @@ class TerraformDeployer:
             # dynamic Ansible setup (per-host factories + cross-VM setup).
             # Snapshots are not used — every trial re-deploys from the baked
             # image, which already has all static software installed.
-            print("[setup] Applying baked image names to Terraform config")
-            self._apply_baked_images_to_config(bake_specs)
-            print("[setup] Deploying Terraform topology")
-            self.deploy_topology()
+            # NOTE: deploy_topology() is intentionally NOT called here.
+            # The caller (main.py setup command) already called deploy_topology()
+            # before invoking setup(). Calling it again would tear down and
+            # recreate the networks, which causes duplicate-network errors when
+            # OpenStack hasn't fully processed the first deletion yet.
             print("[setup] Waiting 5s for VMs to settle")
             time.sleep(5)
             print("[setup] Finding management server")
