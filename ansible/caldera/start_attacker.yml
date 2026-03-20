@@ -29,7 +29,7 @@
       changed_when: false
 
     - name: Start Caldera sandcat agent
-      shell: "nohup /opt/splunkd -server http://{{ caldera_ip }}:8888 -group red &>/dev/null &"
+      shell: "nohup /opt/splunkd -server http://{{ caldera_ip }}:{{ caldera_port }} -group red &>/dev/null &"
       args:
         executable: /bin/bash
 
@@ -48,7 +48,7 @@
     - name: Verify agent is connecting to C2
       wait_for:
         host: "{{ caldera_ip }}"
-        port: 8888
+        port: "{{ caldera_port }}"
         timeout: 30
         state: started
       ignore_errors: true
@@ -56,5 +56,5 @@
 
     - name: Warn if C2 is not reachable from agent host
       debug:
-        msg: "Warning: port 8888 on {{ caldera_ip }} is not reachable from this host — agent may not check in"
+        msg: "Warning: port {{ caldera_port }} on {{ caldera_ip }} is not reachable from this host — agent may not check in"
       when: c2_reachable is failed
