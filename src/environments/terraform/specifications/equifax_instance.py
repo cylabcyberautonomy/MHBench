@@ -41,6 +41,7 @@ class EquifaxInstance(TerraformDeployer):
         self.flags = {}
         self.root_flags = {}
         self.number_of_hosts = number_of_hosts
+        self.c2c_port = config.c2c_port
 
     def parse_network(self):
         self.webservers = get_hosts_on_subnet(
@@ -177,7 +178,7 @@ class EquifaxInstance(TerraformDeployer):
     def runtime_setup(self):
         self.ansible_runner.run_playbook(CheckIfHostUp(self.attacker_host.ip))
         self.ansible_runner.run_playbook(
-            StartAttacker(self.attacker_host.ip, "root", self.caldera_ip)
+            StartAttacker(self.attacker_host.ip, "root", self.caldera_ip, self.c2c_port)
         )
 
     def compile_setup(self):
@@ -194,22 +195,20 @@ class EquifaxInstance(TerraformDeployer):
         self.ansible_runner.run_playbook(CheckIfHostUp(self.webservers[0].ip))
         time.sleep(3)
 
-        # Generate SSH keypair on every webserver for the tomcat user.
-        for host in self.webservers:
-            self.ansible_runner.run_playbook(CreateSSHKey(host.ip, host.users[0]))
+        # Generate SSH keypair on every webserver for the tomcat user (parallel).
+        self.ansible_runner.run_playbooks(
+            [CreateSSHKey(host.ip, host.users[0]) for host in self.webservers]
+        )
 
         # Pick one webserver to hold credentials for all internal hosts so that
         # the attacker has a realistic lateral-movement pivot point.
         webserver_with_creds = random.choice(self.webservers)
-        for employee in self.employee_hosts:
-            self.ansible_runner.run_playbook(
+        targets = self.employee_hosts + self.database_hosts
+        self.ansible_runner.run_playbooks(
+            [
                 SetupServerSSHKeys(
-                    webserver_with_creds.ip, "tomcat", employee.ip, employee.users[0]
+                    webserver_with_creds.ip, "tomcat", target.ip, target.users[0]
                 )
-            )
-        for database in self.database_hosts:
-            self.ansible_runner.run_playbook(
-                SetupServerSSHKeys(
-                    webserver_with_creds.ip, "tomcat", database.ip, database.users[0]
-                )
-            )
+                for target in targets
+            ]
+        )
