@@ -59,7 +59,7 @@
             IdentityFile ~/.ssh/id_rsa
         create: true
         mode: "0600"
-        marker: ""
+        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ follower_user }}"
 
 - hosts: "{{ follower }}"
   tasks:
