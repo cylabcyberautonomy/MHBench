@@ -15,7 +15,7 @@ logger = get_logger()
 
 
 class AnsibleRunner:
-    def __init__(self, ssh_key_path, management_ip, ansible_dir, log_path, quiet=False, verbosity=4):
+    def __init__(self, ssh_key_path, management_ip, ansible_dir, log_path, quiet=True, verbosity=4):
         self.ssh_key_path = ssh_key_path
         self.management_ip = management_ip
         self.ansible_dir = ansible_dir
@@ -42,34 +42,47 @@ class AnsibleRunner:
             print(f"[RUNNING PLAYBOOK]    {playbook.name}")
             print(f"[PLAYBOOK  PARAMS]    {playbook.params}")
 
-        log_path = path.join(self.log_path, "ansible_log.log")
+        playbook_stem = playbook.name.removesuffix(".yml").replace("/", "_")
+        host_val = playbook.params.get("host", "unknown")
+        if isinstance(host_val, list):
+            host_str = str(host_val[0]).replace(".", "_")
+            if len(host_val) > 1:
+                host_str += f"_and_{len(host_val) - 1}_more"
+        else:
+            host_str = str(host_val).replace(".", "_")
+        log_path = path.join(self.log_path, f"ansible_log_{playbook_stem}_{host_str}.log")
 
         ansible_result = None
-        with open(log_path, "a") as f:
-            for attempt in range(self.MAX_RETRIES):
-                with redirect_stdout(f):
-                    # Merge default params with playbook specific params
-                    playbook_full_params = self.ansible_vars_default | playbook.params
-                    manage_slug = (self.management_ip or "default").replace(".", "_")
-                    control_path_dir = f"/tmp/ansible-cp-{manage_slug}"
-                    ansible_result = ansible_runner.run(
-                        extravars=playbook_full_params,
-                        private_data_dir=self._runner_tmp.name,
-                        project_dir=path.abspath(self.ansible_dir),
-                        inventory=path.abspath(path.join(self.ansible_dir, "inventory")),
-                        playbook=playbook.name,
-                        cancel_callback=lambda: None,
-                        quiet=self.quiet,
-                        verbosity=self.verbosity,
-                        envvars={
-                            "ANSIBLE_SSH_CONTROL_PATH_DIR": control_path_dir,
-                            "ANSIBLE_HOST_KEY_CHECKING": "False",
-                        },
-                    )
-                if ansible_result.status == "successful":
-                    break
-                else:
-                    time.sleep(5)
+        for attempt in range(self.MAX_RETRIES):
+            with tempfile.TemporaryDirectory(prefix="mhbench-run-") as run_tmp:
+                # Merge default params with playbook specific params
+                playbook_full_params = self.ansible_vars_default | playbook.params
+                manage_slug = (self.management_ip or "default").replace(".", "_")
+                control_path_dir = f"/tmp/ansible-cp-{manage_slug}"
+                ansible_result = ansible_runner.run(
+                    extravars=playbook_full_params,
+                    private_data_dir=run_tmp,
+                    project_dir=path.abspath(self.ansible_dir),
+                    inventory=path.abspath(path.join(self.ansible_dir, "inventory")),
+                    playbook=playbook.name,
+                    cancel_callback=lambda: None,
+                    quiet=self.quiet,
+                    verbosity=self.verbosity,
+                    envvars={
+                        "ANSIBLE_SSH_CONTROL_PATH_DIR": control_path_dir,
+                        "ANSIBLE_HOST_KEY_CHECKING": "False",
+                    },
+                )
+                # Capture ansible stdout artifact into the per-run log file (thread-safe:
+                # each call has its own log_path, so no shared file handle or sys.stdout mutation)
+                stdout_path = path.join(run_tmp, "artifacts", ansible_result.config.ident, "stdout")
+                if path.exists(stdout_path):
+                    with open(log_path, "a") as f:
+                        with open(stdout_path) as af:
+                            f.write(af.read())
+            if ansible_result.status == "successful":
+                break
+            time.sleep(5)
 
         if ansible_result is None or ansible_result.status != "successful":
             raise Exception(f"Playbook {playbook.name} failed")
@@ -87,39 +100,44 @@ class AnsibleRunner:
             self.run_playbook(playbook)
 
     def run_playbooks_async(self, playbooks: list[AnsiblePlaybook]):
-        threads = []
-        runners = []
         log_path = path.join(self.log_path, "ansible_log.log")
-        with open(log_path, "a") as f:
-            with redirect_stdout(f):
-                # Run max of 10 playbooks at a time
-                for i in range(0, len(playbooks), 10):
-                    for playbook in playbooks[i : i + 10]:
-                        # Merge default params with playbook specific params
-                        playbook_full_params = (
-                            self.ansible_vars_default | playbook.params
-                        )
-                        thread, runner = ansible_runner.run_async(
-                            extravars=playbook_full_params,
-                            private_data_dir=self._runner_tmp.name,
-                            project_dir=path.abspath(self.ansible_dir),
-                            inventory=path.abspath(path.join(self.ansible_dir, "inventory")),
-                            playbook=playbook.name,
-                            quiet=False,
-                        )
-                        threads.append(thread)
-                        runners.append(runner)
+        remaining = list(playbooks)
 
-                    for thread in threads:
-                        thread.join()
+        for attempt in range(self.MAX_RETRIES):
+            if not remaining:
+                break
+            failed = []
+            with open(log_path, "a") as f:
+                with redirect_stdout(f):
+                    for i in range(0, len(remaining), 10):
+                        jobs = []
+                        for playbook in remaining[i : i + 10]:
+                            playbook_full_params = (
+                                self.ansible_vars_default | playbook.params
+                            )
+                            thread, runner = ansible_runner.run_async(
+                                extravars=playbook_full_params,
+                                private_data_dir=self._runner_tmp.name,
+                                project_dir=path.abspath(self.ansible_dir),
+                                inventory=path.abspath(path.join(self.ansible_dir, "inventory")),
+                                playbook=playbook.name,
+                                quiet=False,
+                            )
+                            jobs.append((playbook, thread, runner))
 
-                    # Check for any failed playbooks
-                    for runner in runners:
-                        if runner.status == "failed":
-                            logger.error(f"Playbook failed")
-                            logger.error(f"Playbook Output: {runner.stdout}")
-                            logger.error(f"Playbook Error: {runner.stderr}")
-                            raise Exception(f"Playbook failed")
+                        for _, thread, _ in jobs:
+                            thread.join()
+
+                        for playbook, _, runner in jobs:
+                            if runner.status != "successful":
+                                failed.append(playbook)
+
+            remaining = failed
+            if remaining and attempt < self.MAX_RETRIES - 1:
+                time.sleep(5)
+
+        if remaining:
+            raise Exception(f"Playbook failed after {self.MAX_RETRIES} attempts")
 
     def update_management_ip(self, new_ip):
         self.management_ip = new_ip
