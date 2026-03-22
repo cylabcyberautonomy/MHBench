@@ -13,17 +13,18 @@ class OpenstackCleaner:
         conn = self.openstack_conn
 
         teardown_helper.delete_instances(conn)
-        while conn.list_servers():
+        while conn.list_servers(filters={"project_id": conn.current_project_id}):
             time.sleep(0.5)
 
         teardown_helper.delete_floating_ips(conn)
-        while conn.list_floating_ips():
+        while conn.list_floating_ips(filters={"project_id": conn.current_project_id}):
             time.sleep(0.5)
 
         teardown_helper.delete_routers(conn)
-        while conn.list_routers():
+        while conn.list_routers(filters={"project_id": conn.current_project_id}):
             time.sleep(0.5)
 
+        teardown_helper.delete_ports(conn)
         teardown_helper.delete_subnets(conn)
         teardown_helper.delete_networks(conn)
         teardown_helper.delete_security_groups(conn)
