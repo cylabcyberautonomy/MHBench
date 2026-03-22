@@ -157,6 +157,7 @@ class SimpleNetworkGenerator:
             os_type=OSType.UBUNTU_20,
             flavor=FlavorType.TINY,
             ip_address=host_ip,
+            image_name="mhbench_ubuntu_baked",
             users=[user],
         )
 
