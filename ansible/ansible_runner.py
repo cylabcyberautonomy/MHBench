@@ -3,6 +3,7 @@ import ansible_runner
 from rich import print
 import tempfile
 import time
+import uuid
 
 from .ansible_playbook import AnsiblePlaybook
 
