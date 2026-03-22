@@ -4,7 +4,6 @@ module "perry_manager" {
   key_name = var.perry_key_name
   images   = var.images
   flavors  = var.flavors
-  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -14,7 +13,6 @@ module "attacker" {
   key_name           = var.perry_key_name
   images             = var.images
   flavors            = var.flavors
-  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -60,7 +58,6 @@ resource "openstack_compute_instance_v2" "ring_host" {
     fixed_ip_v4 = "192.168.200.${count.index + 10}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.ring_subnet]
 }

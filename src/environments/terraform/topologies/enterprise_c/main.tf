@@ -5,7 +5,6 @@ module "perry_manager" {
   key_name = var.perry_key_name
   images   = var.images
   flavors  = var.flavors
-  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -15,7 +14,6 @@ module "attacker" {
   key_name           = var.perry_key_name
   images             = var.images
   flavors            = var.flavors
-  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -98,7 +96,6 @@ resource "openstack_compute_instance_v2" "employee_one" {
     fixed_ip_v4 = "192.168.200.${count.index + 10}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
 }
@@ -118,7 +115,6 @@ resource "openstack_compute_instance_v2" "manage_employee_one" {
     name = "${var.project_name}-employee_one_network"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
 }
@@ -140,7 +136,6 @@ resource "openstack_compute_instance_v2" "employee_two" {
     fixed_ip_v4 = "192.168.201.${count.index + 10}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
 }
@@ -160,7 +155,6 @@ resource "openstack_compute_instance_v2" "manage_employee_two" {
     name = "${var.project_name}-employee_two_network"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
 }
@@ -181,7 +175,6 @@ resource "openstack_compute_instance_v2" "ot_sensors" {
     fixed_ip_v4 = "192.168.203.${count.index + 10}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.OT_subnet]
 }
@@ -202,7 +195,6 @@ resource "openstack_compute_instance_v2" "ot_hosts" {
     fixed_ip_v4 = "192.168.203.${count.index + 50}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.OT_subnet]
 }

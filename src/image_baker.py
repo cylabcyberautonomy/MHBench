@@ -91,11 +91,9 @@ class ImageBaker:
     def __init__(
         self,
         openstack_conn: Connection,
-        availability_zone: str = "",
         bake_script: str = _BAKE_SCRIPT,
     ) -> None:
         self.openstack_conn = openstack_conn
-        self.availability_zone = availability_zone
         self.bake_script = bake_script
 
     # ------------------------------------------------------------------

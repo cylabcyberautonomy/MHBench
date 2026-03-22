@@ -63,13 +63,6 @@ variable "flavors" {
     huge   = string
   })
 }
-
-variable "availability_zone" {
-  type        = string
-  description = "Nova availability zone to pin VMs to. Empty string = no pinning."
-  default     = ""
-}
-
 # Configure the OpenStack Provider
 provider "openstack" {
   user_name   = var.openstack_username

@@ -86,7 +86,6 @@ class Config(BaseModel):
     webhook_config: WebhookConfig | None = None
     external_ip: str
     experiment_timeout_minutes: int
-    availability_zone: str = ""  # Nova AZ to pin VMs to (created by Perry per slot)
     c2c_port: int = 8888         # host port of the Incalmo C2 container for this slot
 
     @property
@@ -95,5 +94,4 @@ class Config(BaseModel):
         return {
             **self.openstack_config.to_terraform_vars(),
             **self.terraform_config.to_terraform_vars(),
-            "availability_zone": self.availability_zone,
         }

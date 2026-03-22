@@ -58,13 +58,6 @@ variable "name_prefix" {
   description = "Project name prefix for VM names to avoid cross-project conflicts."
   default     = "perry"
 }
-
-variable "availability_zone" {
-  type        = string
-  description = "Nova availability zone to pin VMs to. Empty string = no pinning."
-  default     = ""
-}
-
 resource "openstack_networking_network_v2" "manage_network" {
   name           = "${var.name_prefix}-manage_network"
   admin_state_up = "true"
@@ -105,7 +98,6 @@ resource "openstack_compute_instance_v2" "manage_host" {
     fixed_ip_v4 = "192.168.198.14"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.manage]
 }

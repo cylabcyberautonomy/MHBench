@@ -4,7 +4,6 @@ module "perry_manager" {
   key_name = var.perry_key_name
   images   = var.images
   flavors  = var.flavors
-  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -14,7 +13,6 @@ module "attacker" {
   key_name           = var.perry_key_name
   images             = var.images
   flavors            = var.flavors
-  availability_zone      = var.availability_zone
   name_prefix            = var.project_name
 }
 
@@ -117,7 +115,6 @@ resource "openstack_compute_instance_v2" "webserver" {
     fixed_ip_v4 = "192.168.200.${count.index + 10}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.webserver_subnet]
 }
@@ -139,7 +136,6 @@ resource "openstack_compute_instance_v2" "employee_a_host" {
     fixed_ip_v4 = "192.168.201.${count.index + 50}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_a_subnet]
 }
@@ -161,7 +157,6 @@ resource "openstack_compute_instance_v2" "employee_b_host" {
     fixed_ip_v4 = "192.168.204.${count.index + 50}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.employee_b_subnet]
 }
@@ -183,7 +178,6 @@ resource "openstack_compute_instance_v2" "database" {
     fixed_ip_v4 = "192.168.203.${count.index + 50}"
   }
 
-  availability_zone = var.availability_zone != "" ? var.availability_zone : null
 
   depends_on = [openstack_networking_subnet_v2.database_subnet]
 }
