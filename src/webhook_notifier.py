@@ -33,3 +33,15 @@ class WebhookNotifier:
         self._send(
             f"\u274c **{operation}** failed for `{env_type}` ({mins}m {secs:02d}s)\n```\n{tb}\n```"
         )
+
+    def notify(self, operation: str, env_type: str, fn):
+        """Run *fn*, sending start/success/error notifications around it."""
+        import time
+        self.notify_start(operation, env_type)
+        _start = time.time()
+        try:
+            fn()
+            self.notify_success(operation, env_type, time.time() - _start)
+        except Exception as exc:
+            self.notify_error(operation, env_type, time.time() - _start, exc)
+            raise
