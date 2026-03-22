@@ -24,6 +24,6 @@
   "experiment_timeout_minutes": 75,
   "webhook_config": {
     "type": "slack",
-    "url": "https://hooks.slack.com/services/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"
+    "url": "YOUR_URL"
   }
 }

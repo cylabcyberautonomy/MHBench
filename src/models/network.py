@@ -44,6 +44,7 @@ class Host(BaseModel):
     os_type: OSType
     flavor: FlavorType = FlavorType.TINY
     ip_address: Optional[IPv4Address] = None
+    image_name: Optional[str] = None  # Overrides os_type→image lookup when set
     users: List[User] = Field(default_factory=list)
     vulnerabilities: List[Vulnerability] = Field(default_factory=list)
 

@@ -3,13 +3,11 @@ import importlib
 import openstack
 from datetime import datetime
 import os
-import time
 from types import SimpleNamespace
 
 from config.config_service import ConfigService
 from src.terraform_deployer import TerraformDeployer
 from src.env_gen_deployer import EnvGenDeployer
-from src.webhook_notifier import WebhookNotifier
 from ansible.ansible_runner import AnsibleRunner
 from src.models.network import NetworkTopology
 import json
@@ -32,12 +30,6 @@ def create_openstack_connection(openstack_cfg):
         user_domain_name="Default",
         project_domain_name="Default",
     )
-
-
-def _make_notifier(config) -> WebhookNotifier | None:
-    if config.webhook_config:
-        return WebhookNotifier(config.webhook_config.url, config.webhook_config.type)
-    return None
 
 
 @click.group()
@@ -116,7 +108,7 @@ def env(ctx, type: str, config_file: str, verbosity: int):
             click.echo(f"Error: Could not find environment '{env_path}'", err=True)
             ctx.exit(1)
 
-        orchestrator = EnvGenDeployer(config, openstack_conn)
+        orchestrator = EnvGenDeployer(config, openstack_conn, label=type)
 
     ctx.obj.environment = environment
     ctx.obj.orchestrator = orchestrator
@@ -127,28 +119,15 @@ def env(ctx, type: str, config_file: str, verbosity: int):
 @click.pass_context
 @click.option("--skip_network", help="Skip network setup", is_flag=True)
 def setup(ctx, skip_network: bool):
-    notifier = _make_notifier(ctx.obj.config)
-    env_type = ctx.obj.env_type
-    if notifier:
-        notifier.notify_start("setup", env_type)
-    start = time.time()
-    try:
-        click.echo("Setting up the environment...")
-        if skip_network:
-            click.echo("Skipping network setup")
-            ctx.obj.environment.find_management_server()
-            ctx.obj.environment.parse_network()
-            ctx.obj.environment.runtime_setup()
-        else:
-            ctx.obj.environment.deploy_topology()
-            ctx.obj.environment.setup()
-            ctx.obj.environment.runtime_setup()
-        if notifier:
-            notifier.notify_success("setup", env_type, time.time() - start)
-    except Exception as exc:
-        if notifier:
-            notifier.notify_error("setup", env_type, time.time() - start, exc)
-        raise
+    click.echo("Setting up the environment...")
+    if skip_network:
+        click.echo("Skipping network setup")
+        ctx.obj.environment.find_management_server()
+        ctx.obj.environment.parse_network()
+        ctx.obj.environment.runtime_setup()
+    else:
+        ctx.obj.environment.setup()
+        ctx.obj.environment.runtime_setup()
 
 
 @env.command()
@@ -157,46 +136,22 @@ def setup(ctx, skip_network: bool):
 @click.option("--skip_host", help="Skip host setup", is_flag=True)
 @click.option("--keep-cache", help="Keep baked qcow2 in .bake-cache/ so a failed upload can be retried without re-baking", is_flag=True)
 def compile(ctx, skip_network: bool, skip_host: bool, keep_cache: bool):
-    notifier = _make_notifier(ctx.obj.config)
-    env_type = ctx.obj.env_type
-    if notifier:
-        notifier.notify_start("compile", env_type)
-    start = time.time()
-    try:
-        click.echo("Compiling the environment (can take several hours)...")
-        if ctx.obj.environment is not None:
-            ctx.obj.environment.compile(not skip_network, not skip_host, keep_cache=keep_cache)
-        else:
-            ctx.obj.orchestrator.compile_environment(ctx.obj.topology)
-        if notifier:
-            notifier.notify_success("compile", env_type, time.time() - start)
-    except Exception as exc:
-        if notifier:
-            notifier.notify_error("compile", env_type, time.time() - start, exc)
-        raise
+    click.echo("Compiling the environment (can take several hours)...")
+    if ctx.obj.environment is not None:
+        ctx.obj.environment.compile(not skip_network, not skip_host, keep_cache=keep_cache)
+    else:
+        ctx.obj.orchestrator.compile_environment(ctx.obj.topology)
 
 
 @env.command()
 @click.pass_context
 def teardown(ctx):
-    notifier = _make_notifier(ctx.obj.config)
-    env_type = ctx.obj.env_type
-    if notifier:
-        notifier.notify_start("teardown", env_type)
-    start = time.time()
-    try:
-        click.echo("Tearing down the environment...")
-        if ctx.obj.environment is not None:
-            ctx.obj.environment.teardown()
-        else:
-            ctx.obj.orchestrator.cleaner.clean_environment()
-        click.echo("Environment has been torn down")
-        if notifier:
-            notifier.notify_success("teardown", env_type, time.time() - start)
-    except Exception as exc:
-        if notifier:
-            notifier.notify_error("teardown", env_type, time.time() - start, exc)
-        raise
+    click.echo("Tearing down the environment...")
+    if ctx.obj.environment is not None:
+        ctx.obj.environment.teardown()
+    else:
+        ctx.obj.orchestrator.cleaner.clean_environment()
+    click.echo("Environment has been torn down")
 
 
 @env.command()

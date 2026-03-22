@@ -64,7 +64,7 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_dat
 resource "openstack_compute_instance_v2" "webserver" {
   count       = 2
   name        = "${var.project_name}-webserver_${count.index}"
-  image_name  = var.images.ubuntu
+  image_name  = var.images.webserver_baked != "" ? var.images.webserver_baked : var.images.ubuntu
   flavor_name = var.flavors.small
   key_pair    = var.perry_key_name
   security_groups = [
@@ -87,7 +87,7 @@ resource "openstack_compute_instance_v2" "webserver" {
 resource "openstack_compute_instance_v2" "database" {
   count       = 48
   name        = "${var.project_name}-database_${count.index}"
-  image_name  = var.images.ubuntu
+  image_name  = var.images.database_baked != "" ? var.images.database_baked : var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [

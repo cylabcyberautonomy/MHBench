@@ -48,10 +48,10 @@ class OpenstackHostDeployer:
         # Track created resources for cleanup
         self.created_instances: Dict[str, Any] = {}
 
-        # OS to image mapping - these should match your OpenStack environment
-        self.os_image_mapping = {
-            OSType.UBUNTU_20: "Ubuntu20",  # Update with actual image name/ID
-            OSType.KALI_LINUX: "kali-cloud",  # Update with actual image name/ID
+        # Fallback OS→image mapping for hosts without image_name set.
+        self.os_image_mapping: Dict[OSType, str] = {
+            OSType.UBUNTU_20: "Ubuntu20",
+            OSType.KALI_LINUX: "kali-cloud",
         }
 
         # Flavor mapping - these should match your OpenStack environment
@@ -147,8 +147,11 @@ class OpenstackHostDeployer:
         if not network:
             raise ValueError(f"Could not find network for host {host.name}")
 
-        # Get image for the OS type
-        if use_base_image:
+        # Get image: host.image_name takes priority (data-driven), then
+        # fall back to legacy flows (name-derived baked image or OS mapping).
+        if host.image_name:
+            image = self._get_image(host.image_name)
+        elif use_base_image:
             image = self._get_image_for_os(host.os_type)
         else:
             image = self._get_image(get_image_name(host.name))
