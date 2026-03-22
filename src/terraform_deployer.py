@@ -3,7 +3,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.image_baker import VmBakeSpec, ImageBaker
 
 import openstack.compute.v2.server
-import openstack.image.v2.image
 from src.terraform_helpers import deploy_network
 from src.topology_manifests import TOPOLOGY_VM_COUNTS
 from src.utility.openstack_helper_functions import teardown_helper
@@ -92,12 +91,7 @@ class TerraformDeployer:
           • optional extra Ansible vars (e.g. Elasticsearch credentials)
           • optional per-host setup playbook factories for setup time
 
-        When this returns a non-empty list, compile() uses ImageBaker to
-        bake each type (skipping any that already exist in Glance) and then
-        deploys Terraform using the baked images.  When it returns an empty
-        list the old in-place Ansible flow is used instead (backward compat).
-
-        Override this in environment subclasses that want the bake flow.
+        Override this in environment subclasses.
         """
         return []
 
@@ -210,158 +204,6 @@ class TerraformDeployer:
             print(f"[deploy] {status}...")
             time.sleep(10)
 
-    def _rebuild_vms(self) -> None:
-        """Re-flash each VM's disk from its baked image without destroying the VM.
-
-        This is faster than deploy_topology() (no network teardown/create) and
-        leaves IPs intact so parse_network() results remain valid across trials.
-        Called at the start of every trial in the bake flow instead of deploy_topology().
-        """
-        bake_specs = self.vm_bake_specs()
-        specs_by_type = {spec.type_name: spec for spec in bake_specs}
-        project_prefix = self.config.openstack_config.project_name + "-"
-
-        servers = [s for s in self.openstack_conn.list_servers() if s.name.startswith(project_prefix)]
-        if not servers:
-            raise RuntimeError(
-                f"No VMs found with prefix '{project_prefix}'. "
-                "Run deploy_topology() (via compile) before setup()."
-            )
-
-        # Resolve image IDs and build the rebuild list up front.
-        image_cache: dict[str, str] = {}
-        rebuild_list: list[tuple] = []  # (server, image_id, image_name)
-        for server in servers:
-            bare_name = server.name[len(project_prefix):]
-            matched_spec = None
-            for type_name, spec in specs_by_type.items():
-                if bare_name.startswith(type_name) and (
-                    matched_spec is None or len(type_name) > len(matched_spec.type_name)
-                ):
-                    matched_spec = spec
-
-            if matched_spec is None:
-                print(f"[rebuild] No bake spec for '{server.name}', skipping")
-                continue
-
-            if matched_spec.baked_image_name not in image_cache:
-                image = self.openstack_conn.get_image(matched_spec.baked_image_name)
-                if image is None:
-                    raise RuntimeError(
-                        f"Baked image '{matched_spec.baked_image_name}' not found in Glance. "
-                        "Run compile first."
-                    )
-                image_cache[matched_spec.baked_image_name] = image.id
-
-            rebuild_list.append((server, image_cache[matched_spec.baked_image_name], matched_spec.baked_image_name))
-
-        # Issue rebuilds in batches and wait for each batch to finish before
-        # starting the next. This prevents saturating hypervisor disk I/O from
-        # too many simultaneous Glance image downloads on the same node.
-        batch_size = 5
-        # Collect VMs that enter ERROR during any batch; retry them after all
-        # batches complete once the rest of the cluster has settled.
-        errored_entries: list[tuple] = []  # (server, image_id, image_name)
-
-        for i in range(0, len(rebuild_list), batch_size):
-            batch = rebuild_list[i:i + batch_size]
-            batch_ids = {server.id for server, _, _ in batch}
-            id_to_entry = {server.id: (server, image_id, image_name) for server, image_id, image_name in batch}
-
-            for server, image_id, image_name in batch:
-                print(f"[rebuild] Rebuilding '{server.name}' from '{image_name}'")
-                self.openstack_conn.compute.rebuild_server(server.id, image_id)
-
-            # Wait for OpenStack to transition batch VMs out of ACTIVE before polling.
-            time.sleep(15)
-
-            # Wait for this batch to reach a terminal state (ACTIVE or ERROR).
-            # Collect errored VMs rather than raising immediately.
-            deadline = time.time() + 1200
-            settled_ids: set[str] = set()
-            while True:
-                current = {s.id: s for s in self.openstack_conn.list_servers() if s.id in batch_ids}
-                for sid, s in current.items():
-                    if sid in settled_ids:
-                        continue
-                    if s.status == "ERROR":
-                        print(f"[rebuild] '{s.name}' entered ERROR; will retry after other VMs settle.")
-                        errored_entries.append(id_to_entry[sid])
-                        settled_ids.add(sid)
-                    elif s.status == "ACTIVE" and s.addresses:
-                        settled_ids.add(sid)
-                if settled_ids >= batch_ids:
-                    active_count = len(batch_ids) - sum(
-                        1 for sid in settled_ids if current.get(sid) and current[sid].status == "ERROR"
-                    )
-                    print(f"[rebuild] Batch {i // batch_size + 1} settled ({active_count}/{len(batch)} ACTIVE).")
-                    break
-                if time.time() > deadline:
-                    raise TimeoutError(f"Timed out waiting for rebuild batch {i // batch_size + 1}")
-                time.sleep(10)
-
-        # Retry errored VMs (up to 3 attempts) after all batches have settled.
-        max_retries = 3
-        for attempt in range(1, max_retries + 1):
-            if not errored_entries:
-                break
-
-            # Wait for every non-errored VM to be ACTIVE so hypervisor load
-            # has dropped before issuing new rebuild requests.
-            all_ids = {server.id for server, _, _ in rebuild_list}
-            errored_ids = {server.id for server, _, _ in errored_entries}
-            non_errored_ids = all_ids - errored_ids
-            if non_errored_ids:
-                print(
-                    f"[rebuild] Waiting for {len(non_errored_ids)} non-errored VMs to be ACTIVE "
-                    f"before retry attempt {attempt}/{max_retries}..."
-                )
-                deadline = time.time() + 1200
-                while True:
-                    current = {s.id: s for s in self.openstack_conn.list_servers() if s.id in non_errored_ids}
-                    ready = {sid for sid, s in current.items() if s.status == "ACTIVE" and s.addresses}
-                    if ready >= non_errored_ids:
-                        break
-                    if time.time() > deadline:
-                        raise TimeoutError(
-                            f"Timed out waiting for non-errored VMs to become ACTIVE before retry attempt {attempt}"
-                        )
-                    time.sleep(10)
-
-            print(f"[rebuild] Retry attempt {attempt}/{max_retries}: rebuilding {len(errored_entries)} VM(s)...")
-            retry_ids = {server.id for server, _, _ in errored_entries}
-            id_to_entry = {server.id: (server, image_id, image_name) for server, image_id, image_name in errored_entries}
-            for server, image_id, image_name in errored_entries:
-                print(f"[rebuild] Retry rebuild '{server.name}' from '{image_name}'")
-                self.openstack_conn.compute.rebuild_server(server.id, image_id)
-
-            time.sleep(15)
-            errored_entries = []
-            deadline = time.time() + 1200
-            settled_ids = set()
-            while True:
-                current = {s.id: s for s in self.openstack_conn.list_servers() if s.id in retry_ids}
-                for sid, s in current.items():
-                    if sid in settled_ids:
-                        continue
-                    if s.status == "ERROR":
-                        print(f"[rebuild] '{s.name}' still ERROR on attempt {attempt}; will retry again.")
-                        errored_entries.append(id_to_entry[sid])
-                        settled_ids.add(sid)
-                    elif s.status == "ACTIVE" and s.addresses:
-                        settled_ids.add(sid)
-                if settled_ids >= retry_ids:
-                    active_count = len(retry_ids) - len(errored_entries)
-                    print(f"[rebuild] Retry attempt {attempt} settled ({active_count}/{len(retry_ids)} ACTIVE).")
-                    break
-                if time.time() > deadline:
-                    raise TimeoutError(f"Timed out waiting for errored VMs on retry attempt {attempt}")
-                time.sleep(10)
-
-        if errored_entries:
-            names = [server.name for server, _, _ in errored_entries]
-            raise RuntimeError(f"VMs still in ERROR after {max_retries} retry attempts: {names}")
-
     def teardown(self):
         if self._notifier:
             self._notifier.notify_start("teardown", self._label)
@@ -377,61 +219,14 @@ class TerraformDeployer:
 
     def compile(self, setup_network: bool = True, setup_hosts: bool = True, keep_cache: bool = False):
         if self._notifier:
-            self._notifier.notify_start("compile", self._label)
-        _start = time.time()
-        try:
+            self._notifier.notify("compile", self._label,
+                                  lambda: self._compile_impl(setup_network, setup_hosts, keep_cache))
+        else:
             self._compile_impl(setup_network, setup_hosts, keep_cache)
-            if self._notifier:
-                self._notifier.notify_success("compile", self._label, time.time() - _start)
-        except Exception as exc:
-            if self._notifier:
-                self._notifier.notify_error("compile", self._label, time.time() - _start, exc)
-            raise
 
     def _compile_impl(self, setup_network: bool = True, setup_hosts: bool = True, keep_cache: bool = False):
-        bake_specs = self.vm_bake_specs()
-
-        if bake_specs:
-            # ── New bake-image flow ──────────────────────────────────────
-            # 1. Bake a qcow2 image for every VM type that has not been baked
-            #    yet, then upload the result to OpenStack Glance so that
-            #    Terraform can reference it by name.
-            baker = ImageBaker(self.openstack_conn, availability_zone=self.config.availability_zone)
-            baker.bake_all(bake_specs, keep_cache=keep_cache)
-            return
-
-        # ── Legacy in-place Ansible flow (no bake specs defined) ─────────
-        if setup_network:
-            self.deploy_topology()
-            self._wait_for_servers_active()
-
-        self.find_management_server()
-        self.parse_network()
-
-        if setup_hosts:
-            self.setup_base_packages()
-            self.compile_setup()
-
-        self.clean_snapshots()
-        self.save_all_snapshots()
-
-    def setup_base_packages(self):
-        self.ansible_runner.run_playbook(CheckIfHostUp(self.attacker_host.ip))
-        time.sleep(3)
-
-        self.ansible_runner.run_playbook(
-            InstallBasePackages(self.network.get_all_host_ips())
-        )
-        self.ansible_runner.run_playbook(InstallKaliPackages(self.attacker_host.ip))
-        self.ansible_runner.run_playbook(CreateSSHKey(self.attacker_host.ip, "root"))
-
-        # Install sysflow on all hosts
-        self.ansible_runner.run_playbook(
-            InstallSysFlow(self.network.get_all_host_ips(), self.config)
-        )
-        self.ansible_runner.run_playbook(
-            InstallFalco(self.network.get_all_host_ips(), self.config)
-        )
+        baker = ImageBaker(self.openstack_conn)
+        baker.bake_all(self.vm_bake_specs(), keep_cache=keep_cache)
 
     def setup(self):
         if self._notifier:
@@ -440,28 +235,17 @@ class TerraformDeployer:
             self._setup_impl()
 
     def _setup_impl(self):
-        bake_specs = self.vm_bake_specs()
-
         def _notify(operation, fn):
             if self._notifier:
                 self._notifier.notify(operation, self._label, fn)
             else:
                 fn()
 
-        if bake_specs:
-            _notify("deploy", self.deploy_topology)
-            self._wait_for_servers_active()
-            self.find_management_server()
-            self.parse_network()
-            _notify("ansible", lambda: (self._run_host_setup_playbooks(), self.compile_setup()))
-        else:
-            # ── Legacy snapshot flow ──────────────────────────────────────
-            self.find_management_server()
-            self.parse_network()
-            self.load_all_snapshots()
-            time.sleep(10)
-            while self.get_error_hosts():
-                self.rebuild_error_hosts()
+        _notify("deploy", self.deploy_topology)
+        self._wait_for_servers_active()
+        self.find_management_server()
+        self.parse_network()
+        _notify("ansible", lambda: (self._run_host_setup_playbooks(), self.compile_setup()))
 
     def _apply_baked_images_to_config(self, specs: list[VmBakeSpec]) -> None:
         """Write baked image names into the in-memory Terraform config so that
@@ -530,178 +314,9 @@ class TerraformDeployer:
         logger.debug(f"Found management server: {manage_ip}")
         self.ansible_runner.update_management_ip(manage_ip)
 
-    def save_snapshot(self, host, poll_interval=120, max_attempts=3):
-        snapshot_name = host.name + "_image"
 
-        for attempt in range(1, max_attempts + 1):
-            image = self.openstack_conn.get_image(snapshot_name)
-            if image:
-                logger.debug(f"Image '{snapshot_name}' already exists. Deleting...")
-                self.openstack_conn.delete_image(image.id, wait=True)  # type: ignore
 
-            # Wait for any in-progress upload to finish before issuing a new
-            # createImage — otherwise Nova returns 409 Conflict.
-            while True:
-                server = self.openstack_conn.get_server_by_id(host.id)
-                if server and getattr(server, "task_state", None) == "image_uploading":
-                    time.sleep(30)
-                else:
-                    break
 
-            print(f"[SNAPSHOT] {snapshot_name}: starting (attempt {attempt}/{max_attempts})...")
-            self.openstack_conn.create_image_snapshot(snapshot_name, host.id, wait=False)
 
-            while True:
-                time.sleep(poll_interval)
-                image = self.openstack_conn.get_image(snapshot_name)
-                if image and image.status == "active":
-                    print(f"[SNAPSHOT] {snapshot_name}: done.")
-                    return image.id
-                if not image or image.status not in ("queued", "saving"):
-                    status = image.status if image else "missing"
-                    print(f"[SNAPSHOT] {snapshot_name}: upload lost on attempt {attempt}/{max_attempts} (status={status}), retrying...")
-                    break
 
-        raise RuntimeError(f"[SNAPSHOT] {snapshot_name}: failed after {max_attempts} attempts")
 
-    def load_snapshot(self, host, wait=False):
-        snapshot_name = host.name + "_image"
-        try:
-            image: openstack.image.v2.image.Image = self.openstack_conn.get_image(
-                snapshot_name
-            )  # type: ignore
-        except AttributeError as e:
-            print(f"No image for host {snapshot_name}")
-            raise e
-
-        if image:
-            logger.debug(
-                f"Loading snapshot {snapshot_name} for instance {host.name}..."
-            )
-            self.openstack_conn.rebuild_server(
-                host.id, image.id, wait=wait, admin_pass=None
-            )
-            if wait:
-                logger.debug(
-                    f"Successfully loaded snapshot {snapshot_name} with id {image.id}"
-                )
-
-    def _snapshot_group(self, servers, batch_size):
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            futures = {executor.submit(self.save_snapshot, s): s for s in servers}
-            for future in as_completed(futures):
-                server = futures[future]
-                exc = future.exception()
-                if exc:
-                    logger.warning(f"[SNAPSHOT] {server.name} thread exited with error: {exc}")
-                else:
-                    logger.debug(f"Snapshot saved for {server.name}")
-
-    def save_all_snapshots(self, batch_size=5):
-        servers = list(self.openstack_conn.list_servers())
-        logger.debug(f"Saving snapshots for {len(servers)} servers (batch_size={batch_size})...")
-        
-        self._snapshot_group(servers, batch_size)
-
-        while True:
-            missing = []
-            for s in servers:
-                image = self.openstack_conn.get_image(s.name + "_image")
-                if not image or image.status != "active":
-                    missing.append(s)
-            if not missing:
-                break
-            print(f"[SNAPSHOT] {len(missing)} image(s) not active, retrying: {[s.name for s in missing]}")
-            self._snapshot_group(missing, batch_size)
-
-    def clean_snapshots(self):
-        logger.debug("Cleaning all snapshots...")
-        images = self.openstack_conn.list_images()
-        for image in images:
-            if "_image" in image.name:
-                self.openstack_conn.delete_image(image.id, wait=True)
-
-    def load_all_snapshots(self, wait=True):
-        logger.debug("Loading all snapshots...")
-        hosts: openstack.compute.v2.server.Server = self.openstack_conn.list_servers()  # type: ignore
-
-        # Check if all images exist
-        hosts_to_rebuild = []
-        for host in hosts:
-            image = self.openstack_conn.get_image(host.name + "_image")
-            if not image:
-                # Skip hosts that don't have snapshots (like dynamically created decoys)
-                # These are typically decoys created during previous experiments
-                if host.name.startswith("decoy"):
-                    logger.warning(
-                        f"Skipping decoy host {host.name} - no snapshot image exists, will delete"
-                    )
-                    # Delete the decoy host since it doesn't have a proper snapshot
-                    try:
-                        self.openstack_conn.delete_server(host.id, wait=True)
-                        logger.info(f"Deleted orphaned decoy host {host.name}")
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to delete orphaned decoy host {host.name}: {e}"
-                        )
-                    continue
-                else:
-                    raise Exception(f"Image {host.name + '_image'} does not exist")
-            hosts_to_rebuild.append(host)
-
-        rebuild_num = 10
-        # Rebuild 10 servers at a time
-        for i in range(0, len(hosts_to_rebuild), rebuild_num):
-            hosts_to_restore = []
-            if i + 5 < len(hosts_to_rebuild):
-                hosts_to_restore = hosts_to_rebuild[i : i + rebuild_num]
-            else:
-                hosts_to_restore = hosts_to_rebuild[i:]
-
-            # Start rebuilding all servers
-            for host in hosts_to_restore:
-                self.load_snapshot(host, wait=False)
-
-            # Wait for rebuild to start
-            time.sleep(5)
-
-            # Wait for 5 servers to be rebuilt
-            waiting_for_rebuild = True
-            while waiting_for_rebuild:
-                waiting_for_rebuild = False
-                for host in hosts_to_restore:
-                    curr_host = self.openstack_conn.get_server_by_id(host.id)
-                    if curr_host and curr_host.status == "REBUILD":
-                        waiting_for_rebuild = True
-
-                time.sleep(1)
-
-        for host in hosts:
-            if "attacker" in host.name:
-                # Weird bug in Kali where after rebuilding sometimes needs to be rebooted
-                time.sleep(10)
-                self.openstack_conn.compute.reboot_server(host.id, reboot_type="HARD")  # type: ignore
-                while True:
-                    current = self.openstack_conn.get_server_by_id(host.id)
-                    if current and current.status == "ACTIVE":
-                        break
-                    time.sleep(1)
-        return
-
-    def get_error_hosts(self):
-        hosts: openstack.compute.v2.server.Server = self.openstack_conn.list_servers()  # type: ignore
-        error_hosts = []
-
-        for host in hosts:
-            if host.status == "ERROR":
-                error_hosts.append(host)
-
-        return error_hosts
-
-    def rebuild_error_hosts(self):
-        error_hosts = self.get_error_hosts()
-        for host in error_hosts:
-            self.openstack_conn.delete_server(host.id, wait=True)
-            self.load_snapshot(host.private_v4, wait=True)
-
-        return
