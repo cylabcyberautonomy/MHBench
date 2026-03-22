@@ -117,10 +117,9 @@ def env(ctx, type: str, config_file: str, verbosity: int):
 
 @env.command()
 @click.pass_context
-@click.option("--skip_network", help="Skip network setup", is_flag=True)
-def setup(ctx, skip_network: bool):
+def setup(ctx):
     click.echo("Setting up the environment...")
-    ctx.obj.environment.setup(skip_deploy=skip_network)
+    ctx.obj.environment.setup()
     ctx.obj.environment.runtime_setup()
 
 

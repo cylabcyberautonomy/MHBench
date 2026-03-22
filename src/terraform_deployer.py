@@ -433,13 +433,13 @@ class TerraformDeployer:
             InstallFalco(self.network.get_all_host_ips(), self.config)
         )
 
-    def setup(self, skip_deploy: bool = False):
+    def setup(self):
         if self._notifier:
-            self._notifier.notify("setup", self._label, lambda: self._setup_impl(skip_deploy))
+            self._notifier.notify("setup", self._label, self._setup_impl)
         else:
-            self._setup_impl(skip_deploy)
+            self._setup_impl()
 
-    def _setup_impl(self, skip_deploy: bool = False):
+    def _setup_impl(self):
         bake_specs = self.vm_bake_specs()
 
         def _notify(operation, fn):
@@ -449,11 +449,8 @@ class TerraformDeployer:
                 fn()
 
         if bake_specs:
-            if not skip_deploy:
-                _notify("deploy", self.deploy_topology)
-                self._wait_for_servers_active()
-
-            _notify("rebuild", self._rebuild_vms)
+            _notify("deploy", self.deploy_topology)
+            self._wait_for_servers_active()
             self.find_management_server()
             self.parse_network()
             _notify("ansible", lambda: (self._run_host_setup_playbooks(), self.compile_setup()))
