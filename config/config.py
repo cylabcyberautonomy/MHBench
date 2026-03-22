@@ -15,6 +15,7 @@ class TerraformImages(BaseModel):
     employee_baked: str = ""
     attacker_baked: str = ""
     manage_host_baked: str = ""
+    host_baked: str = ""
 
 
 class TerraformFlavors(BaseModel):
