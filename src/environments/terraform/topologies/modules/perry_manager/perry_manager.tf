@@ -16,6 +16,7 @@ variable "images" {
     employee_baked    = optional(string, "")
     attacker_baked    = optional(string, "")
     manage_host_baked = optional(string, "")
+    host_baked        = optional(string, "")
   })
 }
 variable "flavors" {
