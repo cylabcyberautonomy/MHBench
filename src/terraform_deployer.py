@@ -5,6 +5,7 @@ from src.image_baker import VmBakeSpec, ImageBaker
 import openstack.compute.v2.server
 import openstack.image.v2.image
 from src.terraform_helpers import deploy_network
+from src.topology_manifests import TOPOLOGY_VM_COUNTS
 from src.utility.openstack_helper_functions import teardown_helper
 import openstack
 from openstack.connection import Connection
@@ -21,6 +22,7 @@ from ansible.defender import InstallSysFlow
 from ansible.defender.falco.install_falco import InstallFalco
 from src.image_baker import ImageBaker, VmBakeSpec
 
+from src.webhook_notifier import WebhookNotifier
 from src.utility.logging import get_logger
 
 logger = get_logger()
@@ -70,6 +72,12 @@ class TerraformDeployer:
         self.flags = {}
         self.root_flags = {}
 
+        self._notifier: WebhookNotifier | None = (
+            WebhookNotifier(config.webhook_config.url, config.webhook_config.type)
+            if config.webhook_config else None
+        )
+        self._label = type(self).__name__
+
     # ------------------------------------------------------------------
     # Image-bake API — override in subclasses to enable the bake flow.
     # ------------------------------------------------------------------
@@ -106,14 +114,18 @@ class TerraformDeployer:
     def parse_network(self):
         return
 
-    def teardown(self):
+    def _teardown_impl(self):
         print("Tearing down...")
 
         conn = self.openstack_conn
 
-        print("Deleting instances...")
-        teardown_helper.delete_instances(conn)
         project_prefix = self.config.openstack_config.project_name + "-"
+
+        print("Collecting floating IPs...")
+        fip_ids = teardown_helper.collect_floating_ips(conn, name_prefix=project_prefix)
+
+        print("Deleting instances...")
+        teardown_helper.delete_instances(conn, name_prefix=project_prefix)
         while True:
             servers = [s for s in conn.list_servers() if s.name.startswith(project_prefix)]
             if not servers:
@@ -125,36 +137,258 @@ class TerraformDeployer:
         time.sleep(5)
 
         print("Deleting floating IPs...")
-        teardown_helper.delete_floating_ips(conn)
+        teardown_helper.delete_floating_ips(conn, fip_ids=fip_ids)
         while True:
-            fips = conn.list_floating_ips(filters={"project_id": conn.current_project_id})
-            if not fips:
+            remaining = [f for f in conn.list_floating_ips(filters={"project_id": conn.current_project_id}) if f.id in fip_ids]
+            if not remaining:
                 break
-            print(f"  Waiting for {len(fips)} floating IP(s) to delete.")
+            print(f"  Waiting for {len(remaining)} floating IP(s) to delete.")
             time.sleep(0.5)
         print("Floating IPs deleted.")
 
         print("Deleting ports...")
-        teardown_helper.delete_ports(conn)
+        teardown_helper.delete_ports(conn, name_prefix=project_prefix)
 
         print("Deleting routers...")
-        teardown_helper.delete_routers(conn)
+        teardown_helper.delete_routers(conn, name_prefix=project_prefix)
         while True:
-            routers = conn.list_routers(filters={"project_id": conn.current_project_id})
+            routers = [r for r in conn.list_routers(filters={"project_id": conn.current_project_id}) if r.name.startswith(project_prefix)]
             if not routers:
                 break
             print(f"  Waiting for {len(routers)} router(s) to delete: {[r.name for r in routers]}")
             time.sleep(0.5)
         print("Routers deleted.")
         print("Deleting subnets...")
-        teardown_helper.delete_subnets(conn)
+        teardown_helper.delete_subnets(conn, name_prefix=project_prefix)
         print("Deleting networks...")
-        teardown_helper.delete_networks(conn)
+        teardown_helper.delete_networks(conn, name_prefix=project_prefix)
         print("Deleting security groups...")
-        teardown_helper.delete_security_groups(conn)
+        teardown_helper.delete_security_groups(conn, name_prefix=project_prefix)
         print("Teardown complete.")
 
+    def _wait_for_servers_active(self, timeout: int = 1200) -> None:
+        """Poll until all expected VMs are ACTIVE with network addresses, or raise on timeout."""
+        project_prefix = self.config.openstack_config.project_name + "-"
+        expected = TOPOLOGY_VM_COUNTS.get(self.topology)
+        if expected is not None:
+            print(f"[deploy] Waiting for {expected} VMs to become ACTIVE...")
+        else:
+            print("[deploy] Waiting for all VMs to become ACTIVE (count unknown)...")
+
+        deadline = time.time() + timeout
+        rebooted: set[str] = set()  # server IDs that have already had one recovery attempt
+        while True:
+            servers = [s for s in self.openstack_conn.list_servers() if s.name.startswith(project_prefix)]
+            errored = [s for s in servers if s.status == "ERROR"]
+            for s in errored:
+                if s.id in rebooted:
+                    raise RuntimeError(
+                        f"Server {s.name} returned to ERROR after reboot; giving up."
+                    )
+                print(f"[deploy] Server {s.name} is in ERROR; resetting state and hard rebooting...")
+                try:
+                    self.openstack_conn.compute.reset_server_state(s.id, state="active")
+                    self.openstack_conn.compute.reboot_server(s.id, reboot_type="HARD")
+                except Exception as e:
+                    raise RuntimeError(f"Could not recover errored server {s.name}: {e}")
+                rebooted.add(s.id)
+            ready = [s for s in servers if s.status == "ACTIVE" and s.addresses]
+            not_ready = [s.name for s in servers if s not in ready]
+            count_ok = expected is None or len(ready) >= expected
+            if count_ok and not not_ready:
+                print(f"[deploy] All {len(ready)} VMs ACTIVE with addresses.")
+                return
+            if time.time() > deadline:
+                raise TimeoutError(
+                    f"Timed out after {timeout}s waiting for VMs. "
+                    f"Ready: {len(ready)}/{expected or '?'}. "
+                    f"Not ready: {not_ready}"
+                )
+            status = f"{len(ready)}/{expected or '?'} ready"
+            if not_ready:
+                status += f", waiting on: {not_ready}"
+            print(f"[deploy] {status}...")
+            time.sleep(10)
+
+    def _rebuild_vms(self) -> None:
+        """Re-flash each VM's disk from its baked image without destroying the VM.
+
+        This is faster than deploy_topology() (no network teardown/create) and
+        leaves IPs intact so parse_network() results remain valid across trials.
+        Called at the start of every trial in the bake flow instead of deploy_topology().
+        """
+        bake_specs = self.vm_bake_specs()
+        specs_by_type = {spec.type_name: spec for spec in bake_specs}
+        project_prefix = self.config.openstack_config.project_name + "-"
+
+        servers = [s for s in self.openstack_conn.list_servers() if s.name.startswith(project_prefix)]
+        if not servers:
+            raise RuntimeError(
+                f"No VMs found with prefix '{project_prefix}'. "
+                "Run deploy_topology() (via compile) before setup()."
+            )
+
+        # Resolve image IDs and build the rebuild list up front.
+        image_cache: dict[str, str] = {}
+        rebuild_list: list[tuple] = []  # (server, image_id, image_name)
+        for server in servers:
+            bare_name = server.name[len(project_prefix):]
+            matched_spec = None
+            for type_name, spec in specs_by_type.items():
+                if bare_name.startswith(type_name) and (
+                    matched_spec is None or len(type_name) > len(matched_spec.type_name)
+                ):
+                    matched_spec = spec
+
+            if matched_spec is None:
+                print(f"[rebuild] No bake spec for '{server.name}', skipping")
+                continue
+
+            if matched_spec.baked_image_name not in image_cache:
+                image = self.openstack_conn.get_image(matched_spec.baked_image_name)
+                if image is None:
+                    raise RuntimeError(
+                        f"Baked image '{matched_spec.baked_image_name}' not found in Glance. "
+                        "Run compile first."
+                    )
+                image_cache[matched_spec.baked_image_name] = image.id
+
+            rebuild_list.append((server, image_cache[matched_spec.baked_image_name], matched_spec.baked_image_name))
+
+        # Issue rebuilds in batches and wait for each batch to finish before
+        # starting the next. This prevents saturating hypervisor disk I/O from
+        # too many simultaneous Glance image downloads on the same node.
+        batch_size = 5
+        # Collect VMs that enter ERROR during any batch; retry them after all
+        # batches complete once the rest of the cluster has settled.
+        errored_entries: list[tuple] = []  # (server, image_id, image_name)
+
+        for i in range(0, len(rebuild_list), batch_size):
+            batch = rebuild_list[i:i + batch_size]
+            batch_ids = {server.id for server, _, _ in batch}
+            id_to_entry = {server.id: (server, image_id, image_name) for server, image_id, image_name in batch}
+
+            for server, image_id, image_name in batch:
+                print(f"[rebuild] Rebuilding '{server.name}' from '{image_name}'")
+                self.openstack_conn.compute.rebuild_server(server.id, image_id)
+
+            # Wait for OpenStack to transition batch VMs out of ACTIVE before polling.
+            time.sleep(15)
+
+            # Wait for this batch to reach a terminal state (ACTIVE or ERROR).
+            # Collect errored VMs rather than raising immediately.
+            deadline = time.time() + 1200
+            settled_ids: set[str] = set()
+            while True:
+                current = {s.id: s for s in self.openstack_conn.list_servers() if s.id in batch_ids}
+                for sid, s in current.items():
+                    if sid in settled_ids:
+                        continue
+                    if s.status == "ERROR":
+                        print(f"[rebuild] '{s.name}' entered ERROR; will retry after other VMs settle.")
+                        errored_entries.append(id_to_entry[sid])
+                        settled_ids.add(sid)
+                    elif s.status == "ACTIVE" and s.addresses:
+                        settled_ids.add(sid)
+                if settled_ids >= batch_ids:
+                    active_count = len(batch_ids) - sum(
+                        1 for sid in settled_ids if current.get(sid) and current[sid].status == "ERROR"
+                    )
+                    print(f"[rebuild] Batch {i // batch_size + 1} settled ({active_count}/{len(batch)} ACTIVE).")
+                    break
+                if time.time() > deadline:
+                    raise TimeoutError(f"Timed out waiting for rebuild batch {i // batch_size + 1}")
+                time.sleep(10)
+
+        # Retry errored VMs (up to 3 attempts) after all batches have settled.
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            if not errored_entries:
+                break
+
+            # Wait for every non-errored VM to be ACTIVE so hypervisor load
+            # has dropped before issuing new rebuild requests.
+            all_ids = {server.id for server, _, _ in rebuild_list}
+            errored_ids = {server.id for server, _, _ in errored_entries}
+            non_errored_ids = all_ids - errored_ids
+            if non_errored_ids:
+                print(
+                    f"[rebuild] Waiting for {len(non_errored_ids)} non-errored VMs to be ACTIVE "
+                    f"before retry attempt {attempt}/{max_retries}..."
+                )
+                deadline = time.time() + 1200
+                while True:
+                    current = {s.id: s for s in self.openstack_conn.list_servers() if s.id in non_errored_ids}
+                    ready = {sid for sid, s in current.items() if s.status == "ACTIVE" and s.addresses}
+                    if ready >= non_errored_ids:
+                        break
+                    if time.time() > deadline:
+                        raise TimeoutError(
+                            f"Timed out waiting for non-errored VMs to become ACTIVE before retry attempt {attempt}"
+                        )
+                    time.sleep(10)
+
+            print(f"[rebuild] Retry attempt {attempt}/{max_retries}: rebuilding {len(errored_entries)} VM(s)...")
+            retry_ids = {server.id for server, _, _ in errored_entries}
+            id_to_entry = {server.id: (server, image_id, image_name) for server, image_id, image_name in errored_entries}
+            for server, image_id, image_name in errored_entries:
+                print(f"[rebuild] Retry rebuild '{server.name}' from '{image_name}'")
+                self.openstack_conn.compute.rebuild_server(server.id, image_id)
+
+            time.sleep(15)
+            errored_entries = []
+            deadline = time.time() + 1200
+            settled_ids = set()
+            while True:
+                current = {s.id: s for s in self.openstack_conn.list_servers() if s.id in retry_ids}
+                for sid, s in current.items():
+                    if sid in settled_ids:
+                        continue
+                    if s.status == "ERROR":
+                        print(f"[rebuild] '{s.name}' still ERROR on attempt {attempt}; will retry again.")
+                        errored_entries.append(id_to_entry[sid])
+                        settled_ids.add(sid)
+                    elif s.status == "ACTIVE" and s.addresses:
+                        settled_ids.add(sid)
+                if settled_ids >= retry_ids:
+                    active_count = len(retry_ids) - len(errored_entries)
+                    print(f"[rebuild] Retry attempt {attempt} settled ({active_count}/{len(retry_ids)} ACTIVE).")
+                    break
+                if time.time() > deadline:
+                    raise TimeoutError(f"Timed out waiting for errored VMs on retry attempt {attempt}")
+                time.sleep(10)
+
+        if errored_entries:
+            names = [server.name for server, _, _ in errored_entries]
+            raise RuntimeError(f"VMs still in ERROR after {max_retries} retry attempts: {names}")
+
+    def teardown(self):
+        if self._notifier:
+            self._notifier.notify_start("teardown", self._label)
+        _start = time.time()
+        try:
+            self._teardown_impl()
+            if self._notifier:
+                self._notifier.notify_success("teardown", self._label, time.time() - _start)
+        except Exception as exc:
+            if self._notifier:
+                self._notifier.notify_error("teardown", self._label, time.time() - _start, exc)
+            raise
+
     def compile(self, setup_network: bool = True, setup_hosts: bool = True, keep_cache: bool = False):
+        if self._notifier:
+            self._notifier.notify_start("compile", self._label)
+        _start = time.time()
+        try:
+            self._compile_impl(setup_network, setup_hosts, keep_cache)
+            if self._notifier:
+                self._notifier.notify_success("compile", self._label, time.time() - _start)
+        except Exception as exc:
+            if self._notifier:
+                self._notifier.notify_error("compile", self._label, time.time() - _start, exc)
+            raise
+
+    def _compile_impl(self, setup_network: bool = True, setup_hosts: bool = True, keep_cache: bool = False):
         bake_specs = self.vm_bake_specs()
 
         if bake_specs:
@@ -169,7 +403,7 @@ class TerraformDeployer:
         # ── Legacy in-place Ansible flow (no bake specs defined) ─────────
         if setup_network:
             self.deploy_topology()
-            time.sleep(5)
+            self._wait_for_servers_active()
 
         self.find_management_server()
         self.parse_network()
@@ -199,43 +433,38 @@ class TerraformDeployer:
             InstallFalco(self.network.get_all_host_ips(), self.config)
         )
 
-    def setup(self):
+    def setup(self, skip_deploy: bool = False):
+        if self._notifier:
+            self._notifier.notify("setup", self._label, lambda: self._setup_impl(skip_deploy))
+        else:
+            self._setup_impl(skip_deploy)
+
+    def _setup_impl(self, skip_deploy: bool = False):
         bake_specs = self.vm_bake_specs()
 
+        def _notify(operation, fn):
+            if self._notifier:
+                self._notifier.notify(operation, self._label, fn)
+            else:
+                fn()
+
         if bake_specs:
-            # ── Bake-image flow ──────────────────────────────────────────
-            # Deploy the Terraform topology using baked images, then run all
-            # dynamic Ansible setup (per-host factories + cross-VM setup).
-            # Snapshots are not used — every trial re-deploys from the baked
-            # image, which already has all static software installed.
-            # NOTE: deploy_topology() is intentionally NOT called here.
-            # The caller (main.py setup command) already called deploy_topology()
-            # before invoking setup(). Calling it again would tear down and
-            # recreate the networks, which causes duplicate-network errors when
-            # OpenStack hasn't fully processed the first deletion yet.
-            print("[setup] Waiting 5s for VMs to settle")
-            time.sleep(5)
-            print("[setup] Finding management server")
+            if not skip_deploy:
+                _notify("deploy", self.deploy_topology)
+                self._wait_for_servers_active()
+
+            _notify("rebuild", self._rebuild_vms)
             self.find_management_server()
-            print("[setup] Parsing network")
             self.parse_network()
-            print("[setup] Running per-host setup playbooks")
-            self._run_host_setup_playbooks()
-            print("[setup] Running compile_setup (dynamic/cross-VM setup)")
-            self.compile_setup()
-            print("[setup] Done")
+            _notify("ansible", lambda: (self._run_host_setup_playbooks(), self.compile_setup()))
         else:
             # ── Legacy snapshot flow ──────────────────────────────────────
-            print("[setup] Legacy flow: finding management server")
             self.find_management_server()
-            print("[setup] Parsing network")
             self.parse_network()
-            print("[setup] Loading snapshots")
             self.load_all_snapshots()
             time.sleep(10)
             while self.get_error_hosts():
                 self.rebuild_error_hosts()
-            print("[setup] Done")
 
     def _apply_baked_images_to_config(self, specs: list[VmBakeSpec]) -> None:
         """Write baked image names into the in-memory Terraform config so that
@@ -248,8 +477,13 @@ class TerraformDeployer:
 
     def _run_host_setup_playbooks(self) -> None:
         """For each live host, run the setup playbook factories registered in
-        the matching VmBakeSpec (matched by host-name prefix == type_name)."""
+        the matching VmBakeSpec (matched by host-name prefix == type_name).
+
+        Hosts are processed in parallel, but each host's playbooks run
+        sequentially to preserve intra-host dependencies (e.g. CreateUser
+        must complete before AddData on the same host)."""
         specs_by_type = {spec.type_name: spec for spec in self.vm_bake_specs()}
+        per_host_playbooks: list[list] = []
         for host in self.network.get_all_hosts():
             # Match the host to a spec by the longest matching type_name prefix.
             matched_spec = None
@@ -263,16 +497,35 @@ class TerraformDeployer:
                     matched_spec = spec
             if matched_spec is None:
                 continue
-            for factory in matched_spec.setup_playbook_factories:
-                playbook = factory(host)
-                if playbook is not None:
-                    self.ansible_runner.run_playbook(playbook)
+            host_playbooks = [
+                p for factory in matched_spec.setup_playbook_factories
+                if (p := factory(host)) is not None
+            ]
+            if host_playbooks:
+                per_host_playbooks.append(host_playbooks)
 
-    def deploy_topology(self):
+        if not per_host_playbooks:
+            return
+
+        errors = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(self.ansible_runner.run_playbooks_serial, playbooks): playbooks
+                for playbooks in per_host_playbooks
+            }
+            for future in as_completed(futures):
+                exc = future.exception()
+                if exc:
+                    errors.append(exc)
+
+        if errors:
+            raise RuntimeError(f"{len(errors)} host(s) failed setup playbooks: {errors}")
+
+    def deploy_topology(self) -> None:
         bake_specs = self.vm_bake_specs()
         if bake_specs:
             self._apply_baked_images_to_config(bake_specs)
-        self.teardown()
+        self._teardown_impl()
         deploy_network(self.topology, self.config)
 
     def find_management_server(self):
@@ -350,35 +603,7 @@ class TerraformDeployer:
     def save_all_snapshots(self, batch_size=5):
         servers = list(self.openstack_conn.list_servers())
         logger.debug(f"Saving snapshots for {len(servers)} servers (batch_size={batch_size})...")
-
-        # # Group servers by flavor size, largest first, to avoid starvation.
-        # # Flavor names come from config so we can map actual name → logical size.
-        # size_order = ["huge", "large", "medium", "small", "tiny"]
-        # flavors = self.config.terraform_config.flavors
-        # flavor_to_size = {getattr(flavors, size): size for size in size_order}
-        #
-        # buckets: dict[str, list] = {size: [] for size in size_order}
-        # unrecognized: list = []
-        # for server in servers:
-        #     flavor_name = (server.flavor or {}).get("original_name", "")
-        #     size = flavor_to_size.get(flavor_name)
-        #     if size:
-        #         buckets[size].append(server)
-        #     else:
-        #         unrecognized.append(server)
-        #
-        # for size in size_order:
-        #     group = buckets[size]
-        #     if not group:
-        #         continue
-        #     print(f"[SNAPSHOT] Starting {size} tier ({len(group)} server(s))...")
-        #     self._snapshot_group(group, batch_size)
-        #     print(f"[SNAPSHOT] {size} tier complete.")
-        #
-        # if unrecognized:
-        #     print(f"[SNAPSHOT] Snapshotting {len(unrecognized)} server(s) with unrecognized flavor...")
-        #     self._snapshot_group(unrecognized, batch_size)
-
+        
         self._snapshot_group(servers, batch_size)
 
         while True:
