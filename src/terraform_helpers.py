@@ -82,6 +82,7 @@ def deploy_network(name: str, config: Config) -> None:
                     f"-state={state_file}",
                     f"-var-file={tfvars_path}",
                     "-auto-approve",
+                    "-parallelism=3",
                 ],
                 cwd=deployment_dir,
                 stdout=log,
