@@ -11,9 +11,11 @@ from ansible.deployment_instance import (
 )
 from ansible.common import CreateUser
 from ansible.goals import AddData
-from ansible.defender import InstallSysFlow
+from ansible.defender import InstallSysFlow, StartServices
+from ansible.caldera import StartAttacker
 
 from src.terraform_deployer import TerraformDeployer
+from src.image_baker import VmBakeSpec
 from src.legacy_models import Network, Subnet
 from src.utility.openstack_processor import get_hosts_on_subnet
 
@@ -39,6 +41,7 @@ class Chain2Hosts(TerraformDeployer):
         self.topology = topology
         self.flags = {}
         self.root_flags = {}
+        self.c2c_port = config.c2c_port
 
     def parse_network(self):
         self.ring_hosts = get_hosts_on_subnet(
@@ -61,6 +64,41 @@ class Chain2Hosts(TerraformDeployer):
             raise Exception(
                 f"Number of hosts in network does not match expected number of hosts. Expected {NUMBER_RING_HOSTS} but got {len(self.network.get_all_hosts())}"
             )
+
+    def vm_bake_specs(self) -> list[VmBakeSpec]:
+        es_address = f"https://{self.config.external_ip}:{self.config.elastic_config.port}"
+        es_password = self.config.elastic_config.api_key
+        defender_vars = {"es_address": es_address, "es_password": es_password}
+        base_image = self.config.terraform_config.images.ubuntu
+        kali_image = self.config.terraform_config.images.kali
+        flavors = self.config.terraform_config.flavors
+        return [
+            VmBakeSpec(
+                type_name="host",
+                base_image_name=base_image,
+                bake_playbooks=["ansible/bake_playbooks/employee.yml"],
+                baked_image_name="mhbench_host_baked",
+                bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                ],
+            ),
+            VmBakeSpec(
+                type_name="attacker",
+                base_image_name=kali_image,
+                bake_playbooks=["ansible/bake_playbooks/attacker.yml"],
+                baked_image_name="mhbench_attacker_baked",
+                bake_extra_vars={"caldera_ip": self.config.external_ip, "user": "root"},
+                flavor_name=flavors.large,
+            ),
+        ]
+
+    def runtime_setup(self):
+        self.ansible_runner.run_playbook(CheckIfHostUp(self.attacker_host.ip))
+        self.ansible_runner.run_playbook(
+            StartAttacker(self.attacker_host.ip, "root", self.caldera_ip, self.c2c_port)
+        )
 
     def compile_setup(self):
         log_event("Deployment Instace", "Setting up ICS network")
