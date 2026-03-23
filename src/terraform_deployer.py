@@ -355,6 +355,6 @@ class TerraformDeployer:
         error_hosts = self.get_error_hosts()
         for host in error_hosts:
             self.openstack_conn.delete_server(host.id, wait=True)
-            self.load_snapshot(host.private_v4, wait=True)
+            self.load_snapshot(host, wait=True)
 
         return
