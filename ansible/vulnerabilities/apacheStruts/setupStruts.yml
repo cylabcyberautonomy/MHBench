@@ -64,7 +64,7 @@
         mode: "u+rwx,g+rx,o=rx"
         recurse: yes
         state: directory
-
+    
     - name: Copy Tomcat service from local to remote
       copy:
         src: tomcat.service
@@ -85,6 +85,38 @@
         owner: tomcat
         group: tomcat
         mode: 0700
+
+    - name: Download Struts 2.3.31 apps archive
+      get_url:
+        url: https://archive.apache.org/dist/struts/2.3.31/struts-2.3.31-apps.zip
+        dest: /tmp/struts-2.3.31-apps.zip
+
+    - name: Extract struts2-showcase WAR from archive
+      shell: unzip -j /tmp/struts-2.3.31-apps.zip "struts-2.3.31/apps/struts2-showcase.war" -d /tmp/
+
+    - name: Deploy Struts WAR as ROOT
+      copy:
+        src: /tmp/struts2-showcase.war
+        dest: /opt/tomcat/webapps/ROOT.war
+        remote_src: yes
+        owner: tomcat
+        group: tomcat
+        mode: 0644
+
+    - name: Remove default ROOT webapp
+      file:
+        path: /opt/tomcat/webapps/ROOT
+        state: absent
+
+    - name: Cleanup Struts archive
+      file:
+        path: /tmp/struts-2.3.31-apps.zip
+        state: absent
+
+    - name: Restart Tomcat to deploy WAR
+      systemd:
+        name: tomcat
+        state: restarted
 
     # Touch .ssh/config if it does not exist,
     # Forces openstack snapshot to save information about tomcat user
