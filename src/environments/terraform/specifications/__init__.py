@@ -10,6 +10,7 @@ from .dumbbell import Dumbbell
 from .dumbbell_pe import DumbbellPE
 from .enterprise_a import EnterpriseA
 from .enterprise_b import EnterpriseB
+from .enterprise_c import EnterpriseC
 from .chain_2hosts import Chain2Hosts
 
 from .dev.dev import DevEnvironment
@@ -28,6 +29,7 @@ __all__ = [
     "DumbbellPE",
     "EnterpriseA",
     "EnterpriseB",
+    "EnterpriseC",
     "Chain2Hosts",
     "DevEnvironment",
     "DevPrivTestEnvironment",
