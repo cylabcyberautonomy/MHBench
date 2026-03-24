@@ -81,7 +81,7 @@ resource "openstack_compute_instance_v2" "employee_one" {
   count       = 10
   name        = "${var.project_name}-employee_A_${count.index}"
   image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
-  flavor_name = var.flavors.small
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -100,7 +100,7 @@ resource "openstack_compute_instance_v2" "manage_employee_one" {
   count       = 1
   name        = "${var.project_name}-manage_A_${count.index}"
   image_name  = var.images.manage_host_baked != "" ? var.images.manage_host_baked : var.images.ubuntu
-  flavor_name = var.flavors.small
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -119,7 +119,7 @@ resource "openstack_compute_instance_v2" "employee_two" {
   count       = 10
   name        = "${var.project_name}-employee_B_${count.index}"
   image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
-  flavor_name = var.flavors.small
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -138,7 +138,7 @@ resource "openstack_compute_instance_v2" "manage_employee_two" {
   count       = 1
   name        = "${var.project_name}-manage_B_${count.index}"
   image_name  = var.images.manage_host_baked != "" ? var.images.manage_host_baked : var.images.ubuntu
-  flavor_name = var.flavors.small
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -157,7 +157,7 @@ resource "openstack_compute_instance_v2" "ot_sensors" {
   count       = 20
   name        = "${var.project_name}-sensor_${count.index}"
   image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
-  flavor_name = var.flavors.small
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,
@@ -176,7 +176,7 @@ resource "openstack_compute_instance_v2" "ot_hosts" {
   count       = 5
   name        = "${var.project_name}-control_host_${count.index}"
   image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
-  flavor_name = var.flavors.small
+  flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
     module.perry_manager.talk_to_manage_name,

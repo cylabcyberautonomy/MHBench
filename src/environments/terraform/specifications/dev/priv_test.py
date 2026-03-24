@@ -88,7 +88,7 @@ class DevPrivTestEnvironment(TerraformDeployer):
                 bake_playbooks=["ansible/bake_playbooks/employee.yml"],
                 baked_image_name="mhbench_host_baked",
                 bake_extra_vars=defender_vars,
-                flavor_name=flavors.small,
+                flavor_name=flavors.tiny,
                 setup_playbook_factories=[lambda host: StartServices(host.ip)],
             ),
             VmBakeSpec(

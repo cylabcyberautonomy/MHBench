@@ -86,7 +86,7 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_ext
 resource "openstack_compute_instance_v2" "manage_host" {
   name        = "${var.name_prefix}-manage_host"
   image_name  = var.images.manage_host_baked != "" ? var.images.manage_host_baked : var.images.ubuntu
-  flavor_name = var.flavors.small
+  flavor_name = var.flavors.tiny
   key_pair    = var.key_name
   security_groups = [
     openstack_networking_secgroup_v2.talk_to_manage.name,
