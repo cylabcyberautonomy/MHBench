@@ -1,0 +1,192 @@
+######### Setup Networking #########
+module "perry_manager" {
+  source     = "../modules/perry_manager"
+  key_name   = var.perry_key_name
+  images     = var.images
+  flavors    = var.flavors
+  name_prefix = var.project_name
+}
+
+module "attacker" {
+  source             = "../modules/attacker"
+  router_external_id = module.perry_manager.router_external_id
+  key_name           = var.perry_key_name
+  images             = var.images
+  flavors            = var.flavors
+  name_prefix        = var.project_name
+}
+
+resource "openstack_networking_network_v2" "employee_one_network" {
+  name           = "${var.project_name}-employee_one_network"
+  admin_state_up = "true"
+  description    = "Employee network one"
+}
+
+resource "openstack_networking_network_v2" "employee_two_network" {
+  name           = "${var.project_name}-employee_two_network"
+  admin_state_up = "true"
+  description    = "Employee network two"
+}
+
+resource "openstack_networking_network_v2" "ot_network" {
+  name           = "${var.project_name}-ot_network"
+  admin_state_up = "true"
+  description    = "The corporate network with critical data"
+}
+
+### Subnets ###
+resource "openstack_networking_subnet_v2" "employee_one_subnet" {
+  name            = "${var.project_name}-employee_one_network"
+  network_id      = openstack_networking_network_v2.employee_one_network.id
+  cidr            = "192.168.200.0/24"
+  ip_version      = 4
+  dns_nameservers = ["8.8.8.8"]
+}
+
+resource "openstack_networking_subnet_v2" "employee_two_subnet" {
+  name            = "${var.project_name}-employee_two_network"
+  network_id      = openstack_networking_network_v2.employee_two_network.id
+  cidr            = "192.168.201.0/24"
+  ip_version      = 4
+  dns_nameservers = ["8.8.8.8"]
+}
+
+resource "openstack_networking_subnet_v2" "ot_subnet" {
+  name            = "${var.project_name}-ot_network"
+  network_id      = openstack_networking_network_v2.ot_network.id
+  cidr            = "192.168.203.0/24"
+  ip_version      = 4
+  dns_nameservers = ["8.8.8.8"]
+}
+
+### Routers ###
+resource "openstack_networking_router_interface_v2" "router_interface_employee_one" {
+  router_id = module.perry_manager.router_external_id
+  subnet_id = openstack_networking_subnet_v2.employee_one_subnet.id
+}
+
+resource "openstack_networking_router_interface_v2" "router_interface_employee_two" {
+  router_id = module.perry_manager.router_external_id
+  subnet_id = openstack_networking_subnet_v2.employee_two_subnet.id
+}
+
+resource "openstack_networking_router_interface_v2" "router_interface_ot" {
+  router_id = module.perry_manager.router_external_id
+  subnet_id = openstack_networking_subnet_v2.ot_subnet.id
+}
+
+######### Setup Compute #########
+### Employee One Subnet Hosts ###
+resource "openstack_compute_instance_v2" "employee_one" {
+  count       = 10
+  name        = "${var.project_name}-employee_A_${count.index}"
+  image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
+  flavor_name = var.flavors.small
+  key_pair    = var.perry_key_name
+  security_groups = [
+    module.perry_manager.talk_to_manage_name,
+    openstack_networking_secgroup_v2.employee_one_group.name
+  ]
+
+  network {
+    name        = "${var.project_name}-employee_one_network"
+    fixed_ip_v4 = "192.168.200.${count.index + 10}"
+  }
+
+  depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
+}
+
+resource "openstack_compute_instance_v2" "manage_employee_one" {
+  count       = 1
+  name        = "${var.project_name}-manage_A_${count.index}"
+  image_name  = var.images.manage_host_baked != "" ? var.images.manage_host_baked : var.images.ubuntu
+  flavor_name = var.flavors.small
+  key_pair    = var.perry_key_name
+  security_groups = [
+    module.perry_manager.talk_to_manage_name,
+    openstack_networking_secgroup_v2.employee_one_group.name
+  ]
+
+  network {
+    name = "${var.project_name}-employee_one_network"
+  }
+
+  depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
+}
+
+### Employee Two Subnet Hosts ###
+resource "openstack_compute_instance_v2" "employee_two" {
+  count       = 10
+  name        = "${var.project_name}-employee_B_${count.index}"
+  image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
+  flavor_name = var.flavors.small
+  key_pair    = var.perry_key_name
+  security_groups = [
+    module.perry_manager.talk_to_manage_name,
+    openstack_networking_secgroup_v2.employee_two_group.name
+  ]
+
+  network {
+    name        = "${var.project_name}-employee_two_network"
+    fixed_ip_v4 = "192.168.201.${count.index + 10}"
+  }
+
+  depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
+}
+
+resource "openstack_compute_instance_v2" "manage_employee_two" {
+  count       = 1
+  name        = "${var.project_name}-manage_B_${count.index}"
+  image_name  = var.images.manage_host_baked != "" ? var.images.manage_host_baked : var.images.ubuntu
+  flavor_name = var.flavors.small
+  key_pair    = var.perry_key_name
+  security_groups = [
+    module.perry_manager.talk_to_manage_name,
+    openstack_networking_secgroup_v2.employee_two_group.name
+  ]
+
+  network {
+    name = "${var.project_name}-employee_two_network"
+  }
+
+  depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
+}
+
+### OT Subnet Hosts ###
+resource "openstack_compute_instance_v2" "ot_sensors" {
+  count       = 20
+  name        = "${var.project_name}-sensor_${count.index}"
+  image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
+  flavor_name = var.flavors.small
+  key_pair    = var.perry_key_name
+  security_groups = [
+    module.perry_manager.talk_to_manage_name,
+    openstack_networking_secgroup_v2.ot_group.name
+  ]
+
+  network {
+    name        = "${var.project_name}-ot_network"
+    fixed_ip_v4 = "192.168.203.${count.index + 10}"
+  }
+
+  depends_on = [openstack_networking_subnet_v2.ot_subnet]
+}
+
+resource "openstack_compute_instance_v2" "ot_hosts" {
+  count       = 5
+  name        = "${var.project_name}-control_host_${count.index}"
+  image_name  = var.images.employee_baked != "" ? var.images.employee_baked : var.images.ubuntu
+  flavor_name = var.flavors.small
+  key_pair    = var.perry_key_name
+  security_groups = [
+    module.perry_manager.talk_to_manage_name,
+    openstack_networking_secgroup_v2.ot_group.name
+  ]
+
+  network {
+    name        = "${var.project_name}-ot_network"
+    fixed_ip_v4 = "192.168.203.${count.index + 50}"
+  }
+
+  depends_on = [openstack_networking_subnet_v2.ot_subnet]
+}
