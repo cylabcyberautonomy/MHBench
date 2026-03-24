@@ -44,7 +44,7 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_com
 resource "openstack_compute_instance_v2" "ring_host" {
   count       = 25
   name        = "${var.project_name}-host_${count.index}"
-  image_name  = var.images.ubuntu
+  image_name  = var.images.host_baked != "" ? var.images.host_baked : var.images.ubuntu
   flavor_name = var.flavors.tiny
   key_pair    = var.perry_key_name
   security_groups = [
