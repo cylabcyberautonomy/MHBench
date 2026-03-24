@@ -6,6 +6,7 @@ from ansible.ansible_runner import AnsibleRunner
 from ansible.deployment_instance import (
     CheckIfHostUp,
     SetupServerSSHKeys,
+    WaitForPort,
 )
 from ansible.common import CreateUser
 from ansible.vulnerabilities import SetupNetcatShell
@@ -109,7 +110,7 @@ class ICSEnvironment(TerraformDeployer):
                 bake_playbooks=["ansible/bake_playbooks/employee.yml"],
                 baked_image_name="mhbench_employee_baked",
                 bake_extra_vars=defender_vars,
-                flavor_name=flavors.small,
+                flavor_name=flavors.tiny,
                 setup_playbook_factories=[lambda host: StartServices(host.ip)],
             ),
             VmBakeSpec(
@@ -118,7 +119,7 @@ class ICSEnvironment(TerraformDeployer):
                 bake_playbooks=["ansible/bake_playbooks/manage_host.yml"],
                 baked_image_name="mhbench_manage_host_baked",
                 bake_extra_vars=defender_vars,
-                flavor_name=flavors.small,
+                flavor_name=flavors.tiny,
                 setup_playbook_factories=[lambda host: StartServices(host.ip)],
             ),
             VmBakeSpec(
@@ -127,7 +128,7 @@ class ICSEnvironment(TerraformDeployer):
                 bake_playbooks=["ansible/bake_playbooks/employee.yml"],
                 baked_image_name="mhbench_employee_baked",
                 bake_extra_vars=defender_vars,
-                flavor_name=flavors.small,
+                flavor_name=flavors.tiny,
                 setup_playbook_factories=[lambda host: StartServices(host.ip)],
             ),
             VmBakeSpec(
@@ -144,7 +145,7 @@ class ICSEnvironment(TerraformDeployer):
                 bake_playbooks=["ansible/bake_playbooks/employee.yml"],
                 baked_image_name="mhbench_employee_baked",
                 bake_extra_vars=defender_vars,
-                flavor_name=flavors.small,
+                flavor_name=flavors.tiny,
                 setup_playbook_factories=[lambda host: StartServices(host.ip)],
             ),
             VmBakeSpec(
@@ -153,7 +154,7 @@ class ICSEnvironment(TerraformDeployer):
                 bake_playbooks=["ansible/bake_playbooks/employee.yml"],
                 baked_image_name="mhbench_employee_baked",
                 bake_extra_vars=defender_vars,
-                flavor_name=flavors.small,
+                flavor_name=flavors.tiny,
                 setup_playbook_factories=[lambda host: StartServices(host.ip)],
             ),
         ]
@@ -164,43 +165,48 @@ class ICSEnvironment(TerraformDeployer):
         self.ansible_runner.run_playbook(CheckIfHostUp(self.employee_one_hosts[0].ip))
         time.sleep(3)
 
-        # Setup users on all hosts
-        for host in self.network.get_all_hosts():
-            for user in host.users:
-                self.ansible_runner.run_playbook(CreateUser(host.ip, user, "ubuntu"))
+        # Setup users on all hosts (parallel)
+        self.ansible_runner.run_playbooks([
+            CreateUser(host.ip, user, "ubuntu")
+            for host in self.network.get_all_hosts()
+            for user in host.users
+        ])
 
-        # Random employee on subnet one
-        for manage_host in self.manage_hosts:
-            # Setup netcat shell on vulnerable employee
-            self.ansible_runner.run_playbook(
-                SetupNetcatShell(manage_host.ip, manage_host.users[0])
+        # Setup netcat shell on each manage host (parallel — each reboots the host)
+        self.ansible_runner.run_playbooks([
+            SetupNetcatShell(manage_host.ip, manage_host.users[0])
+            for manage_host in self.manage_hosts
+        ])
+
+        # Give each manage host SSH keys to all OT sensors (parallel)
+        self.ansible_runner.run_playbooks([
+            SetupServerSSHKeys(
+                manage_host.ip,
+                manage_host.users[0],
+                sensor.ip,
+                sensor.users[0],
             )
+            for manage_host in self.manage_hosts
+            for sensor in self.ot_sensors
+        ])
 
-            # Each employee has SSH keys to all ot sensors
-            for sensor in self.ot_sensors:
-                self.ansible_runner.run_playbook(
-                    SetupServerSSHKeys(
-                        manage_host.ip,
-                        manage_host.users[0],
-                        sensor.ip,
-                        sensor.users[0],
-                    )
-                )
-
-        # Randomly choose 5 OT sensors to have ssh keys to ot hosts
+        # Randomly choose 5 OT sensors to have ssh keys to ot hosts (parallel)
         critical_sensors = random.sample(self.ot_sensors, 5)
-        for i, ot_host in enumerate(self.ot_hosts):
-            sensor = critical_sensors[i]
-            self.ansible_runner.run_playbook(
-                SetupServerSSHKeys(
-                    sensor.ip,
-                    sensor.users[0],
-                    ot_host.ip,
-                    ot_host.users[0],
-                )
+        self.ansible_runner.run_playbooks([
+            SetupServerSSHKeys(
+                critical_sensors[i].ip,
+                critical_sensors[i].users[0],
+                ot_host.ip,
+                ot_host.users[0],
             )
+            for i, ot_host in enumerate(self.ot_hosts)
+        ])
 
     def runtime_setup(self):
+        # Wait for netcat listeners to be up on all manage hosts before starting
+        for manage_host in self.manage_hosts:
+            self.ansible_runner.run_playbook(WaitForPort(manage_host.ip, 4444))
+
         # Randomly choose 1 employee to have attacker
         employee_hosts = self.employee_one_hosts + self.employee_two_hosts
         employee_host = random.choice(employee_hosts)
