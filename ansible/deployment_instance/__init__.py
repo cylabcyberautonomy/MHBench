@@ -1,4 +1,5 @@
 from .check_if_host_up.CheckIfHostUp import CheckIfHostUp
+from .wait_for_port.WaitForPort import WaitForPort
 
 from .install_base_packages.InstallBasePackages import InstallBasePackages
 from .install_base_packages.InstallKaliPackages import InstallKaliPackages
