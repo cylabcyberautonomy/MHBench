@@ -165,20 +165,20 @@ class ICSEnvironment(TerraformDeployer):
         self.ansible_runner.run_playbook(CheckIfHostUp(self.employee_one_hosts[0].ip))
         time.sleep(3)
 
-        # Setup users on all hosts (parallel)
+        # Setup users on all hosts (serial)
         self.ansible_runner.run_playbooks([
             CreateUser(host.ip, user, "ubuntu")
             for host in self.network.get_all_hosts()
             for user in host.users
-        ])
+        ], run_async=False)
 
-        # Setup netcat shell on each manage host (parallel — each reboots the host)
+        # Setup netcat shell on each manage host (serial — each reboots the host)
         self.ansible_runner.run_playbooks([
             SetupNetcatShell(manage_host.ip, manage_host.users[0])
             for manage_host in self.manage_hosts
-        ])
+        ], run_async=False)
 
-        # Give each manage host SSH keys to all OT sensors (parallel)
+        # Give each manage host SSH keys to all OT sensors (serial)
         self.ansible_runner.run_playbooks([
             SetupServerSSHKeys(
                 manage_host.ip,
@@ -188,9 +188,9 @@ class ICSEnvironment(TerraformDeployer):
             )
             for manage_host in self.manage_hosts
             for sensor in self.ot_sensors
-        ])
+        ], run_async=False)
 
-        # Randomly choose 5 OT sensors to have ssh keys to ot hosts (parallel)
+        # Randomly choose 5 OT sensors to have ssh keys to ot hosts (serial)
         critical_sensors = random.sample(self.ot_sensors, 5)
         self.ansible_runner.run_playbooks([
             SetupServerSSHKeys(
@@ -200,7 +200,7 @@ class ICSEnvironment(TerraformDeployer):
                 ot_host.users[0],
             )
             for i, ot_host in enumerate(self.ot_hosts)
-        ])
+        ], run_async=False)
 
     def runtime_setup(self):
         # Wait for netcat listeners to be up on all manage hosts before starting
