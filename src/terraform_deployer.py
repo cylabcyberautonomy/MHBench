@@ -306,6 +306,12 @@ class TerraformDeployer:
         bake_specs = self.vm_bake_specs()
         if bake_specs:
             self._apply_baked_images_to_config(bake_specs)
+            unique_baked = {spec.baked_image_name for spec in bake_specs if spec.baked_image_name}
+            missing = [name for name in unique_baked if not self.openstack_conn.get_image(name)]
+            if missing:
+                raise RuntimeError(
+                    f"Baked images not found in Glance — run compile first: {missing}"
+                )
         self._teardown_impl()
         deploy_network(self.topology, self.config)
 
