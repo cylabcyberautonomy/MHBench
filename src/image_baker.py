@@ -174,7 +174,12 @@ class ImageBaker:
     # ------------------------------------------------------------------
 
     def _download_image(self, image_name: str, dest_path: str) -> None:
-        """Download *image_name* from Glance into *dest_path* as raw bytes."""
+        """Download *image_name* from Glance into *dest_path* as raw bytes.
+
+        Uses the openstack CLI via subprocess rather than the SDK's
+        download_image iterator, which can block indefinitely on a stale HTTP
+        connection left over from a long-running bake-image.sh invocation.
+        """
         image = self.openstack_conn.get_image(image_name)
         if image is None:
             raise RuntimeError(
@@ -182,9 +187,10 @@ class ImageBaker:
             )
 
         logger.info(f"[BAKE] Downloading base image '{image_name}' ...")
-        with open(dest_path, "wb") as fh:
-            for chunk in self.openstack_conn.image.download_image(image.id):
-                fh.write(chunk)
+        subprocess.run(
+            ["openstack", "image", "save", "--file", dest_path, image_name],
+            check=True,
+        )
         print(f"[BAKE] Download complete → {dest_path}")
 
     def _get_flavor_disk_gb(self, flavor_name: str) -> int:
