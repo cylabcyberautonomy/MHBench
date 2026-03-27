@@ -286,6 +286,6 @@ class ImageBaker:
             filename=qcow2_path,
             disk_format="qcow2",
             container_format="bare",
-            visibility="public",
+            visibility="shared",
             wait=True,
         )
