@@ -111,7 +111,7 @@ class EquifaxInstance(TerraformDeployer):
                 ],
                 baked_image_name="mhbench_webserver_baked",
                 bake_extra_vars=defender_vars,
-                flavor_name=flavors.tiny,
+                flavor_name=flavors.small,
                 # Start telemetry services once the VM is live.
                 setup_playbook_factories=[
                     lambda host: StartServices(host.ip),
