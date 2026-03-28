@@ -8,6 +8,11 @@ from typing import Iterator
 from config.config import Config
 
 
+def _clean_env() -> dict:
+    """Return os.environ with all OS_* variables stripped so Terraform uses only provider-block values."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("OS_")}
+
+
 @contextmanager
 def _temporary_tfvars(config: Config) -> Iterator[str]:
     """Create a throwaway tfvars file for Terraform and clean it up afterwards."""
@@ -38,6 +43,7 @@ def deploy_network(name: str, config: Config) -> None:
         cwd=deployment_dir,
         capture_output=True,
         text=True,
+        env=_clean_env(),
     )
 
     # Use a per-project state file via -state= instead of workspaces.
@@ -72,8 +78,14 @@ def deploy_network(name: str, config: Config) -> None:
                 stdout=log,
                 stderr=log,
                 universal_newlines=True,
+                env=_clean_env(),
             )
             proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"terraform destroy failed (exit {proc.returncode}). "
+                    f"See {tf_log_file} for details."
+                )
 
             log.write(f"\n=== terraform apply ===\n")
             proc = subprocess.Popen(
@@ -88,8 +100,14 @@ def deploy_network(name: str, config: Config) -> None:
                 stdout=log,
                 stderr=log,
                 universal_newlines=True,
+                env=_clean_env(),
             )
             proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"terraform apply failed (exit {proc.returncode}). "
+                    f"See {tf_log_file} for details."
+                )
 
 
 def destroy_network(name: str, config: Config) -> None:
@@ -99,6 +117,7 @@ def destroy_network(name: str, config: Config) -> None:
         cwd=deployment_dir,
         capture_output=True,
         text=True,
+        env=_clean_env(),
     )
 
     project_name = config.openstack_config.project_name
@@ -117,4 +136,5 @@ def destroy_network(name: str, config: Config) -> None:
             cwd=deployment_dir,
             stdout=subprocess.PIPE,
             universal_newlines=True,
+            env=_clean_env(),
         ).communicate()
