@@ -108,7 +108,8 @@ resource "openstack_compute_instance_v2" "manage_employee_one" {
   ]
 
   network {
-    name = "${var.project_name}-employee_one_network"
+    name        = "${var.project_name}-employee_one_network"
+    fixed_ip_v4 = "192.168.200.200"
   }
 
   depends_on = [openstack_networking_subnet_v2.employee_one_subnet]
@@ -146,7 +147,8 @@ resource "openstack_compute_instance_v2" "manage_employee_two" {
   ]
 
   network {
-    name = "${var.project_name}-employee_two_network"
+    name        = "${var.project_name}-employee_two_network"
+    fixed_ip_v4 = "192.168.201.200"
   }
 
   depends_on = [openstack_networking_subnet_v2.employee_two_subnet]
