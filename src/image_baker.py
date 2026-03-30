@@ -187,10 +187,25 @@ class ImageBaker:
             )
 
         logger.info(f"[BAKE] Downloading base image '{image_name}' ...")
-        subprocess.run(
+        auth = self.openstack_conn.config.auth
+        os_env = {k: v for k, v in os.environ.items() if k != "OS_CLOUD"}
+        os_env.update({
+            "OS_AUTH_URL": auth.get("auth_url", ""),
+            "OS_USERNAME": auth.get("username", ""),
+            "OS_PASSWORD": auth.get("password", ""),
+            "OS_PROJECT_NAME": auth.get("project_name", ""),
+            "OS_USER_DOMAIN_NAME": auth.get("user_domain_name", "Default"),
+            "OS_PROJECT_DOMAIN_NAME": auth.get("project_domain_name", "Default"),
+            "OS_REGION_NAME": self.openstack_conn.config.region_name or "",
+        })
+        result = subprocess.run(
             ["openstack", "image", "save", "--file", dest_path, image_name],
-            check=True,
+            env=os_env,
         )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"[BAKE] 'openstack image save' failed (exit {result.returncode}) — see stderr above"
+            )
         print(f"[BAKE] Download complete → {dest_path}")
 
     def _get_flavor_disk_gb(self, flavor_name: str) -> int:
