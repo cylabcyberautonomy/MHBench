@@ -1,5 +1,4 @@
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.image_baker import VmBakeSpec, ImageBaker
 
 import openstack.compute.v2.server
@@ -288,19 +287,8 @@ class TerraformDeployer:
         if not per_host_playbooks:
             return
 
-        errors = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {
-                executor.submit(self.ansible_runner.run_playbooks_serial, playbooks): playbooks
-                for playbooks in per_host_playbooks
-            }
-            for future in as_completed(futures):
-                exc = future.exception()
-                if exc:
-                    errors.append(exc)
-
-        if errors:
-            raise RuntimeError(f"{len(errors)} host(s) failed setup playbooks: {errors}")
+        for playbooks in per_host_playbooks:
+            self.ansible_runner.run_playbooks_serial(playbooks)
 
     def deploy_topology(self) -> None:
         bake_specs = self.vm_bake_specs()
