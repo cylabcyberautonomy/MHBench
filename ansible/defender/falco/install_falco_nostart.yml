@@ -99,6 +99,11 @@
           suffix: "none"
           index: "{{ es_index }}"
 
+  - name: Remove falcosidekick mask if present
+    file:
+      path: /etc/systemd/system/falcosidekick.service
+      state: absent
+
   - name: Create falcosidekick systemd unit
     copy:
       dest: /etc/systemd/system/falcosidekick.service
