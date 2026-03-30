@@ -40,9 +40,29 @@ resource "openstack_networking_router_interface_v2" "router_interface_manage_com
 }
 
 ######### Setup Compute #########
-### Ring Subnet Hosts ###
+### Webserver Hosts (Struts-vulnerable, first 8 IPs) ###
+resource "openstack_compute_instance_v2" "webserver" {
+  count       = 8
+  name        = "${var.project_name}-webserver_${count.index}"
+  image_name  = var.images.webserver_baked != "" ? var.images.webserver_baked : var.images.ubuntu
+  flavor_name = var.flavors.small
+  key_pair    = var.perry_key_name
+  security_groups = [
+    module.perry_manager.talk_to_manage_name,
+    openstack_networking_secgroup_v2.employee_one_group.name
+  ]
+
+  network {
+    name = "${var.project_name}-ring_network"
+    fixed_ip_v4 = "192.168.200.${count.index + 10}"
+  }
+
+  depends_on = [openstack_networking_subnet_v2.ring_subnet]
+}
+
+### Ring Subnet Hosts (nc + ssh targets, next 17 IPs) ###
 resource "openstack_compute_instance_v2" "ring_host" {
-  count       = 25
+  count       = 17
   name        = "${var.project_name}-host_${count.index}"
   image_name  = var.images.host_baked != "" ? var.images.host_baked : var.images.ubuntu
   flavor_name = var.flavors.tiny
@@ -54,10 +74,8 @@ resource "openstack_compute_instance_v2" "ring_host" {
 
   network {
     name = "${var.project_name}-ring_network"
-    // sequential ips
-    fixed_ip_v4 = "192.168.200.${count.index + 10}"
+    fixed_ip_v4 = "192.168.200.${count.index + 18}"
   }
-
 
   depends_on = [openstack_networking_subnet_v2.ring_subnet]
 }

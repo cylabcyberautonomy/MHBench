@@ -10,7 +10,7 @@ from ansible.deployment_instance import (
 )
 from ansible.common import CreateUser
 from ansible.goals import AddData
-from ansible.vulnerabilities import SetupNetcatShell, SetupStrutsVulnerability
+from ansible.vulnerabilities import SetupNetcatShell
 from ansible.caldera import StartAttacker
 from ansible.defender import StartServices
 
@@ -44,18 +44,18 @@ class Star(TerraformDeployer):
         self.c2c_port = config.c2c_port
 
     def parse_network(self):
-        self.star_hosts = get_hosts_on_subnet(
-            self.openstack_conn, "192.168.200.0/24", host_name_prefix="host"
+        self.webservers = sorted(
+            get_hosts_on_subnet(self.openstack_conn, "192.168.200.0/24", host_name_prefix="webserver"),
+            key=lambda h: tuple(int(x) for x in h.ip.split(".")),
+        )
+        ring_hosts = sorted(
+            get_hosts_on_subnet(self.openstack_conn, "192.168.200.0/24", host_name_prefix="host"),
+            key=lambda h: tuple(int(x) for x in h.ip.split(".")),
         )
 
-        # Distribute hosts into 3 categories
-        self.webservers = self.star_hosts[: len(self.star_hosts) // 3]
-
-        self.nc_hosts = self.star_hosts[
-            len(self.star_hosts) // 3 : 2 * len(self.star_hosts) // 3
-        ]
-
-        self.ssh_hosts = self.star_hosts[2 * len(self.star_hosts) // 3 :]
+        self.nc_hosts = ring_hosts[: len(ring_hosts) // 2]
+        self.ssh_hosts = ring_hosts[len(ring_hosts) // 2 :]
+        self.star_hosts = self.webservers + ring_hosts
 
         self.attacker_host = get_hosts_on_subnet(
             self.openstack_conn, "192.168.202.0/24", host_name_prefix="attacker"
@@ -63,7 +63,6 @@ class Star(TerraformDeployer):
         self.attacker_host.users.append("root")
 
         ringSubnet = Subnet("ring_network", self.star_hosts, "employee_one_group")
-
         self.network = Network("ring_network", [ringSubnet])
 
         # Setup tomcat users on all webservers
@@ -88,6 +87,17 @@ class Star(TerraformDeployer):
         kali_image = self.config.terraform_config.images.kali
         flavors = self.config.terraform_config.flavors
         return [
+            VmBakeSpec(
+                type_name="webserver",
+                base_image_name=base_image,
+                bake_playbooks=["ansible/bake_playbooks/webserver.yml"],
+                baked_image_name="mhbench_webserver_baked",
+                bake_extra_vars=defender_vars,
+                flavor_name=flavors.small,
+                setup_playbook_factories=[
+                    lambda host: StartServices(host.ip),
+                ],
+            ),
             VmBakeSpec(
                 type_name="host",
                 base_image_name=base_image,
@@ -129,10 +139,6 @@ class Star(TerraformDeployer):
                 self.ansible_runner.run_playbook(CreateUser(host.ip, user, "ubuntu"))
         for host in self.webservers:
             self.ansible_runner.run_playbook(CreateSSHKey(host.ip, host.users[0]))
-
-        # Setup apache struts vulnerabilities
-        for host in self.webservers:
-            self.ansible_runner.run_playbook(SetupStrutsVulnerability(host.ip))
 
         # Setup netcat shell
         for host in self.nc_hosts:
