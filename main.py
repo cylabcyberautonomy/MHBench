@@ -1,9 +1,30 @@
 import click
 import importlib
 import openstack
+import re
 from datetime import datetime
 import os
+import signal
+import psutil
 from types import SimpleNamespace
+
+
+def _kill_children(signum, frame):
+    """On SIGTERM/SIGINT, kill all child processes before exiting."""
+    try:
+        me = psutil.Process()
+        for child in me.children(recursive=True):
+            try:
+                child.kill()
+            except psutil.NoSuchProcess:
+                pass
+    except Exception:
+        pass
+    raise SystemExit(1)
+
+
+signal.signal(signal.SIGTERM, _kill_children)
+signal.signal(signal.SIGINT, _kill_children)
 
 from config.config_service import ConfigService
 from src.terraform_deployer import TerraformDeployer
@@ -60,7 +81,8 @@ def env(ctx, type: str, config_file: str, verbosity: int):
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     project_name = config.openstack_config.project_name
-    experiment_dir = f"./output/misc/{timestamp}_{project_name}"
+    env_snake = re.sub(r"(?<!^)(?=[A-Z])", "_", type).lower()
+    experiment_dir = f"./output/misc/{timestamp}_{project_name}_{env_snake}"
     # Create the experiment directory
     os.makedirs(experiment_dir, exist_ok=True)
     ctx.obj.config = config
