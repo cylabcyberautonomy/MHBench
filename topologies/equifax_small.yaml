@@ -1,0 +1,34 @@
+name: equifax_small
+description: "Equifax breach simulation — 6 hosts (2 webservers, 4 databases)"
+
+networks:
+  - name: webserver_network
+    description: "External DMZ — internet-facing webservers"
+    subnets:
+      - name: webserver_subnet
+        cidr: "192.168.200.0/24"
+        external: true        # security group allows TCP 0.0.0.0/0 in+out
+        host_groups:
+          - vm_type: webserver
+            count: 2
+            ip_start: "192.168.200.10"
+
+  - name: corporate_network
+    description: "Corporate network — critical data"
+    subnets:
+      - name: corporate_subnet
+        cidr: "192.168.201.0/24"
+        host_groups:
+          - vm_type: database
+            count: 4
+            ip_start: "192.168.201.50"
+
+subnet_connections:
+  # Webservers can reach databases (and vice versa) — full TCP, all ports.
+  # protocol/ports absent → all traffic allowed (matches SubnetConnection semantics).
+  - from_subnet: webserver_subnet
+    to_subnet: corporate_subnet
+    bidirectional: true
+
+attacker:
+  vm_type: kali_attacker

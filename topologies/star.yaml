@@ -1,0 +1,20 @@
+name: star
+description: "Star topology — 25 hosts (8 webservers, 17 hosts) in a single network"
+
+networks:
+  - name: ring_network
+    description: "Star network"
+    subnets:
+      - name: ring_subnet
+        cidr: "192.168.200.0/24"
+        external: true
+        host_groups:
+          - vm_type: webserver
+            count: 8
+            ip_start: "192.168.200.10"
+          - vm_type: host
+            count: 17
+            ip_start: "192.168.200.18"
+
+attacker:
+  vm_type: kali_attacker

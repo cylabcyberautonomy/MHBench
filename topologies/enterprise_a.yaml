@@ -1,0 +1,48 @@
+name: enterprise_a
+description: "Enterprise A — 30 hosts (10 webservers, 10 employees, 10 databases)"
+
+networks:
+  - name: webserver_network
+    description: "External DMZ — internet-facing webservers"
+    subnets:
+      - name: webserver_subnet
+        cidr: "192.168.200.0/24"
+        external: true
+        host_groups:
+          - vm_type: webserver
+            count: 10
+            ip_start: "192.168.200.10"
+
+  - name: employee_a_network
+    description: "Employee network"
+    subnets:
+      - name: employee_a_subnet
+        cidr: "192.168.201.0/24"
+        host_groups:
+          - vm_type: employee
+            count: 10
+            ip_start: "192.168.201.50"
+
+  - name: database_network
+    description: "Database network"
+    subnets:
+      - name: database_subnet
+        cidr: "192.168.203.0/24"
+        host_groups:
+          - vm_type: database
+            count: 10
+            ip_start: "192.168.203.50"
+
+subnet_connections:
+  - from_subnet: webserver_subnet
+    to_subnet: employee_a_subnet
+    bidirectional: true
+  - from_subnet: webserver_subnet
+    to_subnet: database_subnet
+    bidirectional: true
+  - from_subnet: employee_a_subnet
+    to_subnet: database_subnet
+    bidirectional: true
+
+attacker:
+  vm_type: kali_attacker
