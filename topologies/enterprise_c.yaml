@@ -1,0 +1,62 @@
+name: enterprise_c
+description: "Enterprise C — 46 hosts (10+1 employees A, 10+1 employees B, 20 sensors, 5 control hosts)"
+
+networks:
+  - name: employee_one_network
+    description: "Employee network one"
+    subnets:
+      - name: employee_one_subnet
+        cidr: "192.168.200.0/24"
+        host_groups:
+          - vm_type: employee
+            name_prefix: employee_A
+            count: 10
+            ip_start: "192.168.200.10"
+          - vm_type: manage_host
+            name_prefix: manage_A
+            count: 1
+            ip_start: "192.168.200.200"
+
+  - name: employee_two_network
+    description: "Employee network two"
+    subnets:
+      - name: employee_two_subnet
+        cidr: "192.168.201.0/24"
+        host_groups:
+          - vm_type: employee
+            name_prefix: employee_B
+            count: 10
+            ip_start: "192.168.201.10"
+          - vm_type: manage_host
+            name_prefix: manage_B
+            count: 1
+            ip_start: "192.168.201.200"
+
+  - name: ot_network
+    description: "OT network — sensors and control hosts"
+    subnets:
+      - name: ot_subnet
+        cidr: "192.168.203.0/24"
+        host_groups:
+          - vm_type: employee
+            name_prefix: sensor
+            count: 20
+            ip_start: "192.168.203.10"
+          - vm_type: employee
+            name_prefix: control_host
+            count: 5
+            ip_start: "192.168.203.50"
+
+subnet_connections:
+  - from_subnet: employee_one_subnet
+    to_subnet: employee_two_subnet
+    bidirectional: true
+  - from_subnet: employee_one_subnet
+    to_subnet: ot_subnet
+    bidirectional: true
+  - from_subnet: employee_two_subnet
+    to_subnet: ot_subnet
+    bidirectional: true
+
+attacker:
+  vm_type: kali_attacker

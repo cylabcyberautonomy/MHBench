@@ -1,0 +1,17 @@
+name: openstack_dev
+description: "OpenStack dev environment — single flat network with 5 hosts"
+
+networks:
+  - name: dev_network
+    description: "Development network"
+    subnets:
+      - name: dev_subnet
+        cidr: "192.168.200.0/24"
+        external: true
+        host_groups:
+          - vm_type: host
+            count: 5
+            ip_start: "192.168.200.10"
+
+attacker:
+  vm_type: kali_attacker

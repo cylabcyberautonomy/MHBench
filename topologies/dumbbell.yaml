@@ -1,0 +1,32 @@
+name: dumbbell
+description: "Dumbbell topology — 30 hosts (15 webservers, 15 databases)"
+
+networks:
+  - name: webserver_network
+    description: "External DMZ — internet-facing webservers"
+    subnets:
+      - name: webserver_subnet
+        cidr: "192.168.200.0/24"
+        external: true
+        host_groups:
+          - vm_type: webserver
+            count: 15
+            ip_start: "192.168.200.10"
+
+  - name: corporate_network
+    description: "Corporate network — critical data"
+    subnets:
+      - name: critical_company_subnet
+        cidr: "192.168.201.0/24"
+        host_groups:
+          - vm_type: database
+            count: 15
+            ip_start: "192.168.201.50"
+
+subnet_connections:
+  - from_subnet: webserver_subnet
+    to_subnet: critical_company_subnet
+    bidirectional: true
+
+attacker:
+  vm_type: kali_attacker
