@@ -1,0 +1,25 @@
+- name: ubuntu24
+  parent: null
+  playbooks: []
+  location: src/compilation/images/ubuntu24.qcow2
+- name: kali
+  parent: null
+  playbooks: []
+  location: src/compilation/images/kali.qcow2
+- name: ubuntu_root_ssh
+  parent: ubuntu24
+  playbooks:
+    - enable_root_ssh
+  location: null
+- name: ubuntu_base
+  parent: ubuntu_root_ssh
+  playbooks:
+    - install_base_packages
+    - install_sysflow_nostart
+    - install_falco_nostart
+  location: null
+- name: webserver
+  parent: ubuntu_base
+  playbooks:
+    - setup_struts
+  location: null

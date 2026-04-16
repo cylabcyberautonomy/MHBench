@@ -1,4 +1,6 @@
-import json
+from pathlib import Path
+
+import yaml
 
 from config.config import Config
 
@@ -6,9 +8,9 @@ from config.config import Config
 class OfflineRegistryService:
 
     def __init__(self, config: Config) -> None:
-        self._path = config.registry.registry_dir / "offline_registry.json"
+        self._path = config.registry.registry_dir / "offline_registry.yaml"
         self.images_dir = config.compilation.images_dir
-        self._images: list[dict] = json.loads(self._path.read_text())
+        self._images: list[dict] = yaml.safe_load(self._path.read_text())
         self._lookup: dict[str, dict] = {img["name"]: img for img in self._images}
 
     def get_parent(self, name: str) -> str | None:
@@ -33,10 +35,10 @@ class OfflineRegistryService:
 
     def update_location(self, name: str, location: str) -> None:
         self._lookup[name]["location"] = location
-        self._path.write_text(json.dumps(self._images, indent=2))
+        self._path.write_text(yaml.dump(self._images, default_flow_style=False))
 
     def add_image(self, name: str, parent: str | None, playbooks: list[str]) -> None:
         entry = {"name": name, "parent": parent, "playbooks": playbooks, "location": None}
         self._images.append(entry)
         self._lookup[name] = entry
-        self._path.write_text(json.dumps(self._images, indent=2))
+        self._path.write_text(yaml.dump(self._images, default_flow_style=False))
