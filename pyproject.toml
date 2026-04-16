@@ -1,0 +1,13 @@
+[project]
+name = "mhbench"
+version = "0.1.0"
+description = "Multi-host cybersecurity benchmark environment system"
+requires-python = ">=3.12"
+dependencies = [
+    "ansible==10.4.0",
+    "ansible-runner>=2.4.1",
+    "click>=8.2.1",
+    "openstacksdk>=4.5.0",
+    "pydantic>=2.12.0",
+    "pyyaml>=6.0",
+]

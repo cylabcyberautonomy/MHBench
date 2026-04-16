@@ -1,0 +1,14 @@
+[
+  {
+    "name": "ubuntu24",
+    "parent": null,
+    "playbooks": [],
+    "location": "src/compilation/images/ubuntu24.qcow2"
+  },
+  {
+    "name": "kali",
+    "parent": null,
+    "playbooks": [],
+    "location": "src/compilation/images/kali.qcow2"
+  }
+]

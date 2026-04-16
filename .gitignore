@@ -1,0 +1,10 @@
+# General
+*.pyc
+uv.lock
+
+
+# Config
+config/config.yaml
+
+# Compilation
+*.qcow2
