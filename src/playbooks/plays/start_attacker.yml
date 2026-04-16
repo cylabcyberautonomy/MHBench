@@ -1,0 +1,60 @@
+---
+- hosts: "{{ host }}"
+  become: true
+  become_user: '{{ user }}'
+
+  tasks:
+    - name: Wait for host to go up
+      wait_for_connection:
+        delay: 0
+        timeout: 60
+
+    - name: Verify sandcat binary exists
+      stat:
+        path: /opt/splunkd
+      register: sandcat_stat
+
+    - name: Fail if sandcat binary is missing
+      fail:
+        msg: "Sandcat binary not found at /opt/splunkd — was the image baked correctly?"
+      when: not sandcat_stat.stat.exists
+
+    - name: Verify sandcat binary is executable
+      fail:
+        msg: "Sandcat binary at /opt/splunkd is not executable"
+      when: not sandcat_stat.stat.executable
+
+    - name: Kill any existing sandcat process
+      shell: pkill -f '[s]plunkd' || true
+      changed_when: false
+
+    - name: Start Caldera sandcat agent
+      shell: "nohup /opt/splunkd -server http://{{ caldera_ip }}:{{ caldera_port }} -group red &>/dev/null &"
+      args:
+        executable: /bin/bash
+
+    - name: Wait for agent process to be running
+      shell: pgrep -f splunkd
+      register: pgrep_result
+      retries: 12
+      delay: 5
+      until: pgrep_result.rc == 0
+
+    - name: Verify agent PID is recorded
+      fail:
+        msg: "Sandcat agent failed to start after 60 seconds"
+      when: pgrep_result.rc != 0
+
+    - name: Verify agent is connecting to C2
+      wait_for:
+        host: "{{ caldera_ip }}"
+        port: "{{ caldera_port }}"
+        timeout: 30
+        state: started
+      ignore_errors: true
+      register: c2_reachable
+
+    - name: Warn if C2 is not reachable from agent host
+      debug:
+        msg: "Warning: port {{ caldera_port }} on {{ caldera_ip }} is not reachable from this host — agent may not check in"
+      when: c2_reachable is failed

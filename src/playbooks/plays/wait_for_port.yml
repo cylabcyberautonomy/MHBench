@@ -1,0 +1,11 @@
+---
+- hosts: "{{ host }}"
+  gather_facts: no
+  remote_user: root
+
+  tasks:
+  - name: Wait for port to be listening
+    ansible.builtin.wait_for:
+      host: "127.0.0.1"
+      port: "{{ port }}"
+      timeout: 60

@@ -1,0 +1,11 @@
+---
+# webserver.yml — Bake playbook for webserver VMs.
+#
+# Layers the Apache Struts vulnerability setup on top of the common Ubuntu
+# base.  The result is an image ready to act as a Struts-vulnerable webserver
+# the moment Terraform boots it; no further Ansible is needed for static
+# software installation.
+
+- import_playbook: ./bake_ubuntu_base.yml
+
+- import_playbook: ./setup_struts.yml

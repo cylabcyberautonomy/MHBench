@@ -1,0 +1,138 @@
+---
+# playbooks/falco_elastic.yml
+- name: Install Falco and forward alerts to Elasticsearch
+  hosts: "{{ host }}"
+  become: yes
+
+  vars:
+    # ---- Editable vars -------------------------------------------------
+    falco_version: ""               # blank = latest from repo
+    falcosidekick_version: "2.31.1" # pin if you like; blank = latest
+    es_address: "https://elasticsearch.example.com:9200"  # Include protocol and port
+    es_user: "elastic"
+    es_password: "changeme"
+    es_index: "falco"
+    # -------------------------------------------------------------------
+
+  tasks:
+  - name: Ensure base packages are present
+    apt:
+      name:
+        - curl
+        - gnupg
+        - software-properties-common
+        - apt-transport-https
+        - clang
+        - llvm
+        - dkms
+        - make
+        - linux-headers-{{ ansible_kernel }}
+      state: present
+      update_cache: yes
+
+  - name: Add Falco GPG key
+    shell: |
+      curl -fsSL https://falco.org/repo/falcosecurity-packages.asc | \
+      gpg --dearmor -o /usr/share/keyrings/falco-archive-keyring.gpg
+    args:
+      creates: /usr/share/keyrings/falco-archive-keyring.gpg
+
+  - name: Add Falco apt repository
+    shell: |
+      echo "deb [signed-by=/usr/share/keyrings/falco-archive-keyring.gpg] https://download.falco.org/packages/deb stable main" | \
+      tee -a /etc/apt/sources.list.d/falcosecurity.list
+    args:
+      creates: /etc/apt/sources.list.d/falcosecurity.list
+
+  - name: Install Falco engine & eBPF driver
+    apt:
+      name: "{{ 'falco=' + falco_version if falco_version else 'falco' }}"
+      state: present
+      update_cache: yes
+
+  - name: Create Falco configuration from template
+    copy:
+      src: "aux_files/falco.yaml"
+      dest: /etc/falco/falco.yaml
+      mode: '0644'
+    notify: Restart Falco
+
+  - name: Determine architecture for falcosidekick
+    set_fact:
+      falcosidekick_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+  - name: Download and extract falcosidekick
+    unarchive:
+      src: "https://github.com/falcosecurity/falcosidekick/releases/download/{{ falcosidekick_version }}/falcosidekick_{{ falcosidekick_version }}_linux_{{ falcosidekick_arch }}.tar.gz"
+      dest: /tmp
+      remote_src: yes
+      creates: /tmp/falcosidekick
+
+  - name: Move falcosidekick binary to /usr/local/bin
+    copy:
+      src: /tmp/falcosidekick
+      dest: /usr/local/bin/falcosidekick
+      mode: "0755"
+      remote_src: yes
+
+  - name: Clean up temporary falcosidekick files
+    file:
+      path: /tmp/falcosidekick
+      state: absent
+
+  - name: Ensure falcosidekick config directory exists
+    file:
+      path: /etc/falcosidekick
+      state: directory
+      mode: "0755"
+
+  - name: Create falcosidekick configuration file
+    copy:
+      dest: /etc/falcosidekick/config.yaml
+      mode: "0644"
+      content: |
+        # Elasticsearch configuration
+        elasticsearch:
+          hostport: "{{ es_address }}"
+          username: "{{ es_user }}"
+          password: "{{ es_password }}"
+          checkcert: false
+          suffix: "none"
+          index: "{{ es_index }}"
+
+  - name: Create falcosidekick systemd unit
+    copy:
+      dest: /etc/systemd/system/falcosidekick.service
+      mode: "0644"
+      content: |
+        [Unit]
+        Description=Falco Sidekick
+        After=network.target
+
+        [Service]
+        Type=simple
+        ExecStart=/usr/local/bin/falcosidekick -c /etc/falcosidekick/config.yaml
+        Restart=on-failure
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
+    notify: Reload systemd
+
+  - name: Enable & start services
+    systemd:
+      name: "{{ item }}"
+      state: started
+      enabled: yes
+    loop:
+      - falco
+      - falcosidekick
+
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+    - name: Restart Falco
+      systemd:
+        name: falco
+        state: restarted

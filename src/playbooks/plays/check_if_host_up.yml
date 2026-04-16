@@ -1,0 +1,60 @@
+---
+- hosts: "{{ host }}"
+  gather_facts: no
+  remote_user: root
+
+  tasks:
+  - name: Wait for bastion SSH port to be reachable
+    delegate_to: localhost
+    become: no
+    wait_for:
+      host: "{{ manage_ip }}"
+      port: 22
+      state: started
+      connect_timeout: 10
+      sleep: 20
+      timeout: 250
+
+  - name: Wait for bastion to reach target SSH port
+    delegate_to: localhost
+    become: no
+    changed_when: false
+    retries: 10
+    delay: 20
+    register: bastion_tcp_check
+    until: bastion_tcp_check.rc == 0
+    shell: >-
+      ssh -i {{ ssh_key_path }}
+      -v
+      -o BatchMode=yes
+      -o ConnectTimeout=10
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      root@{{ manage_ip }}
+      "timeout 5 bash -lc '</dev/tcp/{{ host }}/22'"
+
+  - name: Wait for target SSH banner via bastion
+    delegate_to: localhost
+    become: no
+    changed_when: false
+    retries: 10
+    delay: 20
+    register: bastion_ssh_banner_check
+    until: bastion_ssh_banner_check.rc == 0
+    shell: >-
+      ssh -i {{ ssh_key_path }}
+      -v
+      -o BatchMode=yes
+      -o ConnectTimeout=10
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      root@{{ manage_ip }}
+      "timeout 5 bash -lc 'exec 3<>/dev/tcp/{{ host }}/22; IFS= read -r line <&3; [[ \"\$line\" == SSH-* ]]'"
+
+  - name: Wait for host to go up
+    wait_for_connection:
+      delay: 0
+      timeout: 180
+    
+  - name: Gathering facts
+    setup:

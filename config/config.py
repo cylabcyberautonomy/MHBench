@@ -11,12 +11,17 @@ class CompilationConfig(BaseModel):
 
 
 class RegistryConfig(BaseModel):
-    path: Path
+    registry_dir: Path
+
+
+class PlaybooksConfig(BaseModel):
+    playbooks_dir: Path
 
 
 class Config(BaseModel):
     compilation: CompilationConfig
     registry: RegistryConfig
+    playbooks: PlaybooksConfig
 
     @classmethod
     def load(cls, config_path: Path = CONFIG_PATH) -> "Config":
