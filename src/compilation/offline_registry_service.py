@@ -30,15 +30,26 @@ class OfflineRegistryService:
         chain.reverse()
         return chain
 
+    def get_disk_size_gb(self, name: str) -> int | None:
+        return self._lookup[name].get("disk_size_gb")
+
     def get_location(self, name: str) -> str | None:
         return self._lookup[name]["location"]
 
     def update_location(self, name: str, location: str) -> None:
         self._lookup[name]["location"] = location
-        self._path.write_text(yaml.dump(self._images, default_flow_style=False))
+        self._write()
 
     def add_image(self, name: str, parent: str | None, playbooks: list[str]) -> None:
         entry = {"name": name, "parent": parent, "playbooks": playbooks, "location": None}
         self._images.append(entry)
         self._lookup[name] = entry
-        self._path.write_text(yaml.dump(self._images, default_flow_style=False))
+        self._write()
+
+    def _write(self) -> None:
+        ordered = [
+            {"name": i["name"], "parent": i["parent"], "playbooks": i["playbooks"],
+             "disk_size_gb": i.get("disk_size_gb"), "location": i["location"]}
+            for i in self._images
+        ]
+        self._path.write_text(yaml.dump(ordered, default_flow_style=False, sort_keys=False))

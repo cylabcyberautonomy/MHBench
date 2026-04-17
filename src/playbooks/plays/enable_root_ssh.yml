@@ -1,0 +1,15 @@
+- hosts: "{{ host }}"
+  become: true
+
+  tasks:
+    - name: Enable root login in cloud-init config
+      ansible.builtin.lineinfile:
+        path: /etc/cloud/cloud.cfg
+        regexp: '^disable_root:'
+        line: 'disable_root: false'
+
+    - name: Allow root SSH login in sshd_config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin yes'
