@@ -1,0 +1,11 @@
+- name: ubuntu_base_running
+  parent: ubuntu_base
+  playbooks:
+  - start_sysflow
+  - start_defender_services
+  location: null
+
+- name: webserver_running
+  parent: ubuntu_base_running
+  playbooks: []
+  location: null

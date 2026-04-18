@@ -1,0 +1,65 @@
+{
+  "name": "dumbbell_topology",
+  "networks": [
+    {
+      "name": "dumbbell_network",
+      "description": "Dumbbell topology with a client subnet and a server subnet",
+      "subnets": [
+        {
+          "name": "client_subnet",
+          "cidr": "192.168.100.0/24",
+          "dns_servers": ["8.8.8.8", "8.8.4.4"],
+          "hosts": [
+            {
+              "name": "client_0",
+              "vm_type": "v2_ubuntu_base",
+              "flavor": "m1.small",
+              "ip_address": "192.168.100.10"
+            },
+            {
+              "name": "client_1",
+              "vm_type": "v2_ubuntu_base",
+              "flavor": "m1.small",
+              "ip_address": "192.168.100.11"
+            },
+            {
+              "name": "client_2",
+              "vm_type": "v2_ubuntu_base",
+              "flavor": "m1.small",
+              "ip_address": "192.168.100.12"
+            }
+          ]
+        },
+        {
+          "name": "server_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": ["8.8.8.8", "8.8.4.4"],
+          "hosts": [
+            {
+              "name": "webserver_0",
+              "vm_type": "v2_webserver",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "database_0",
+              "vm_type": "v2_ubuntu_base",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.20"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "client_subnet",
+      "to_subnet": "server_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": []
+}
