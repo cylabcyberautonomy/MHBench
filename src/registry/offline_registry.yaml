@@ -3,20 +3,17 @@
   playbooks: []
   disk_size_gb: null
   location: src/compilation/images/ubuntu24.qcow2
-
 - name: kali
   parent: null
   playbooks: []
   disk_size_gb: null
   location: src/compilation/images/kali.qcow2
-
 - name: ubuntu_root_ssh
   parent: ubuntu24
   playbooks:
   - enable_root_ssh
   disk_size_gb: null
-  location: null
-
+  location: src/compilation/images/ubuntu_root_ssh.qcow2
 - name: ubuntu_base
   parent: ubuntu_root_ssh
   playbooks:
@@ -24,8 +21,7 @@
   - install_sysflow_nostart
   - install_falco_nostart
   disk_size_gb: 12
-  location: null
-
+  location: src/compilation/images/ubuntu_base.qcow2
 - name: webserver
   parent: ubuntu_base
   playbooks:

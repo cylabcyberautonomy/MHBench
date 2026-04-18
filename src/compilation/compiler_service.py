@@ -27,6 +27,7 @@ class CompilerService:
         output = self._images_dir / f"{name}.qcow2"
         if not force and output.exists():
             logger.info("'%s' already compiled — skipping.", name)
+            self._offline.update_location(name, str(output))
             return
         parent = self._offline.get_parent(name)
         if parent is None:
