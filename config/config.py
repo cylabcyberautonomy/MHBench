@@ -30,11 +30,19 @@ class OpenStackConfig(BaseModel):
     client_timeout: int = 7200
 
 
+class ManagementConfig(BaseModel):
+    cidr: str
+    host_ip: str
+    vm_type: str
+    flavor: str
+
+
 class Config(BaseModel):
     compilation: CompilationConfig
     registry: RegistryConfig
     playbooks: PlaybooksConfig
     openstack: Optional[OpenStackConfig] = None
+    management: Optional[ManagementConfig] = None
 
     @classmethod
     def load(cls, config_path: Path = CONFIG_PATH) -> "Config":

@@ -12,19 +12,19 @@
           "hosts": [
             {
               "name": "client_0",
-              "vm_type": "v2_ubuntu_base_running",
+              "vm_type": "ubuntu_base_running",
               "flavor": "m1.small",
               "ip_address": "192.168.100.10"
             },
             {
               "name": "client_1",
-              "vm_type": "v2_ubuntu_base_running",
+              "vm_type": "ubuntu_base_running",
               "flavor": "m1.small",
               "ip_address": "192.168.100.11"
             },
             {
               "name": "client_2",
-              "vm_type": "v2_ubuntu_base_running",
+              "vm_type": "ubuntu_base_running",
               "flavor": "m1.small",
               "ip_address": "192.168.100.12"
             }
@@ -37,13 +37,13 @@
           "hosts": [
             {
               "name": "webserver_0",
-              "vm_type": "v2_webserver_running",
+              "vm_type": "webserver_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.10"
             },
             {
               "name": "database_0",
-              "vm_type": "v2_ubuntu_base_running",
+              "vm_type": "ubuntu_base_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.20"
             }
@@ -63,12 +63,11 @@
   ],
   "playbooks": [
     {
-      "name": "seed_data",
+      "name": "add_data",
       "args": {
         "host": "webserver_0",
         "host_user": "root",
-        "src": "src/playbooks/files/data.txt",
-        "dest": "/home/ubuntu/data.txt"
+        "path": "/home/ubuntu/data.json"
       }
     },
     {

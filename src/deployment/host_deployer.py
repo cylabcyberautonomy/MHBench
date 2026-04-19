@@ -23,9 +23,58 @@ class HostDeployer:
         self._conn = conn
         self._project_id = conn.current_project_id
         self._ssh_key_name = config.openstack.ssh_key_name
+        self._management = config.management
         self._online = online_registry
 
-    def deploy(self, topology: NetworkTopology) -> None:
+    def deploy(self, topology: NetworkTopology) -> str | None:
+        mgmt_floating_ip: str | None = None
+
+        if self._management:
+            mgmt = self._management
+            base_image_name = self._online.get_base_image(mgmt.vm_type)
+            image = self._conn.image.find_image(base_image_name)
+            if not image:
+                raise RuntimeError(f"Image '{base_image_name}' not found in Glance.")
+            flavor = self._conn.compute.find_flavor(mgmt.flavor)
+            if not flavor:
+                raise RuntimeError(f"Flavor '{mgmt.flavor}' not found in OpenStack.")
+            os_mgmt_net = self._conn.network.find_network("management_network", project_id=self._project_id)
+            if not os_mgmt_net:
+                raise RuntimeError("OpenStack network 'management_network' not found.")
+
+            time.sleep(1)
+            server = self._conn.compute.create_server(
+                name="management_host",
+                imageRef=image.id,
+                flavorRef=flavor.id,
+                networks=[{"uuid": os_mgmt_net.id, "fixed_ip": mgmt.host_ip}],
+                security_groups=[{"name": "management_sg"}],
+                key_name=self._ssh_key_name,
+            )
+            time.sleep(1)
+            deadline = time.monotonic() + _DEPLOY_TIMEOUT
+            while True:
+                if time.monotonic() > deadline:
+                    raise TimeoutError("management_host did not reach ACTIVE within timeout.")
+                time.sleep(_POLL_INTERVAL)
+                current = self._conn.compute.get_server(server.id)
+                if current.status == "ACTIVE":
+                    logger.info("Active: management_host")
+                    break
+                elif current.status == "ERROR":
+                    raise RuntimeError(f"management_host entered ERROR: {getattr(current, 'fault', 'unknown')}")
+
+            ext_net = self._conn.network.find_network("external")
+            if not ext_net:
+                raise RuntimeError("External network 'external' not found.")
+            time.sleep(1)
+            fip = self._conn.network.create_ip(floating_network_id=ext_net.id)
+            time.sleep(1)
+            port = next(iter(self._conn.network.ports(device_id=server.id, network_id=os_mgmt_net.id)))
+            self._conn.network.update_ip(fip.id, port_id=port.id)
+            mgmt_floating_ip = fip.floating_ip_address
+            logger.info("Assigned floating IP %s to management_host", mgmt_floating_ip)
+
         hosts = topology.get_all_hosts()
         for i in range(0, len(hosts), _BATCH_SIZE):
             batch = hosts[i:i + _BATCH_SIZE]
@@ -52,6 +101,7 @@ class HostDeployer:
                 if host.ip_address:
                     network_spec["fixed_ip"] = str(host.ip_address)
 
+                time.sleep(1)
                 server = self._conn.compute.create_server(
                     name=host.name,
                     imageRef=image.id,
@@ -79,8 +129,21 @@ class HostDeployer:
                 for server_id in done:
                     del pending[server_id]
 
+        return mgmt_floating_ip
+
     def teardown(self, topology: NetworkTopology) -> None:
+        for fip in self._conn.network.ips(project_id=self._project_id):
+            self._conn.network.delete_ip(fip.id)
+            logger.info("Released floating IP: %s", fip.floating_ip_address)
+
         pending: dict[str, str] = {}
+
+        if self._management:
+            for server in self._conn.compute.servers(name="management_host", project_id=self._project_id):
+                self._conn.compute.delete_server(server.id, force=True)
+                pending[server.id] = "management_host"
+                logger.info("Deleting: management_host")
+
         for host in topology.get_all_hosts():
             matches = list(self._conn.compute.servers(name=host.name, project_id=self._project_id))
             for server in matches:

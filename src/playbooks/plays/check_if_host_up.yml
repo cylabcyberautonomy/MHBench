@@ -31,7 +31,7 @@
       -o StrictHostKeyChecking=no
       -o UserKnownHostsFile=/dev/null
       root@{{ manage_ip }}
-      "timeout 5 bash -lc '</dev/tcp/{{ host }}/22'"
+      "timeout 5 bash -lc '</dev/tcp/{{ ansible_host }}/22'"
 
   - name: Wait for target SSH banner via bastion
     delegate_to: localhost
@@ -49,7 +49,7 @@
       -o StrictHostKeyChecking=no
       -o UserKnownHostsFile=/dev/null
       root@{{ manage_ip }}
-      "timeout 5 bash -lc 'exec 3<>/dev/tcp/{{ host }}/22; IFS= read -r line <&3; [[ \"\$line\" == SSH-* ]]'"
+      "timeout 5 bash -lc 'exec 3<>/dev/tcp/{{ ansible_host }}/22; IFS= read -r line <&3; [[ \"\$line\" == SSH-* ]]'"
 
   - name: Wait for host to go up
     wait_for_connection:
