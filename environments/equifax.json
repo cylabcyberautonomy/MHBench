@@ -1,0 +1,145 @@
+{
+  "name": "equifax_topology",
+  "networks": [
+    {
+      "name": "equifax_network",
+      "description": "Equifax-inspired topology with a public-facing Struts web server and internal employee and database subnet",
+      "subnets": [
+        {
+          "name": "dmz_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": ["8.8.8.8", "8.8.4.4"],
+          "hosts": [
+            {
+              "name": "struts_server",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            }
+          ]
+        },
+        {
+          "name": "internal_subnet",
+          "cidr": "192.168.201.0/24",
+          "dns_servers": ["8.8.8.8", "8.8.4.4"],
+          "hosts": [
+            {
+              "name": "employeeA",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.3"
+            },
+            {
+              "name": "employeeB",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.4"
+            },
+            {
+              "name": "databaseA",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.5"
+            },
+            {
+              "name": "databaseB",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.6"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "dmz_subnet",
+      "to_subnet": "internal_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "attacker_subnet",
+      "to_subnet": "dmz_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "attacker_subnet",
+      "to_subnet": "internal_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "setup_struts",
+      "args": {
+        "host": "struts_server"
+      }
+    },
+    {
+      "name": "equifax_ssh_config",
+      "args": {
+        "host": "struts_server",
+        "host_user": "tomcat"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "struts_server",
+        "host_user": "tomcat",
+        "follower": "employeeA",
+        "follower_user": "employeeA"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "struts_server",
+        "host_user": "tomcat",
+        "follower": "employeeB",
+        "follower_user": "employeeB"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "struts_server",
+        "host_user": "tomcat",
+        "follower": "databaseA",
+        "follower_user": "databaseA"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "struts_server",
+        "host_user": "tomcat",
+        "follower": "databaseB",
+        "follower_user": "databaseB"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "databaseA",
+        "host_user": "root",
+        "path": "/home/databaseA/pii_data.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "databaseB",
+        "host_user": "root",
+        "path": "/home/databaseB/pii_data.json"
+      }
+    }
+  ]
+}
