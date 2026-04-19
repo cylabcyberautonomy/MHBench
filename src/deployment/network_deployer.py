@@ -18,15 +18,12 @@ class NetworkDeployer:
         self._project_id = conn.current_project_id
 
     def deploy(self, topology: NetworkTopology) -> None:
-        pid = self._project_id
-
         ext_net = self._conn.network.find_network("external")
         if not ext_net:
             raise RuntimeError("External network 'external' not found in OpenStack.")
 
         router = self._conn.network.create_router(
             name="router",
-            project_id=pid,
             admin_state_up=True,
             external_gateway_info={"network_id": ext_net.id},
         )
@@ -40,7 +37,6 @@ class NetworkDeployer:
         for subnet in topology.get_all_subnets():
             os_net = self._conn.network.create_network(
                 name=subnet.name,
-                project_id=pid,
                 admin_state_up=True,
             )
             deadline = time.monotonic() + 60
@@ -51,7 +47,6 @@ class NetworkDeployer:
 
             os_subnet = self._conn.network.create_subnet(
                 name=f"{subnet.name}-subnet",
-                project_id=pid,
                 network_id=os_net.id,
                 ip_version=4,
                 cidr=str(subnet.cidr),
@@ -69,7 +64,6 @@ class NetworkDeployer:
         for subnet in topology.get_all_subnets():
             sg = self._conn.network.create_security_group(
                 name=subnet.sg_name,
-                project_id=pid,
                 description=f"Security group for {subnet.name}",
             )
             if subnet.external:
