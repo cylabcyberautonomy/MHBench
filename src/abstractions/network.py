@@ -18,11 +18,17 @@ class PlaybookRef(BaseModel):
     args: dict = Field(default_factory=dict)
 
 
+class HostInterface(BaseModel):
+    subnet: str
+    ip_address: IPv4Address | None = None
+
+
 class Host(BaseModel):
     name: str
     vm_type: str
     flavor: str = "m1.small"
     ip_address: IPv4Address | None = None
+    extra_interfaces: list[HostInterface] = Field(default_factory=list)
 
 
 class Subnet(BaseModel):
