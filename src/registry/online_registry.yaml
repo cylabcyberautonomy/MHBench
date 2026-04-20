@@ -6,6 +6,16 @@
   location: null
 
 - name: webserver_running
-  parent: ubuntu_base_running
-  playbooks: []
+  parent: webserver
+  playbooks:
+  - start_sysflow
+  - start_defender_services
+  location: null
+
+- name: kali_running
+  parent: Kali
+  playbooks:
+  - enable_root_ssh
+  - bake_attacker
+  - start_attacker
   location: null

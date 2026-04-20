@@ -3,7 +3,7 @@
   playbooks: []
   disk_size_gb: null
   location: src/compilation/images/ubuntu24.qcow2
-- name: kali
+- name: Kali
   parent: null
   playbooks: []
   disk_size_gb: null
@@ -27,4 +27,4 @@
   playbooks:
   - setup_struts
   disk_size_gb: null
-  location: null
+  location: src/compilation/images/webserver.qcow2
