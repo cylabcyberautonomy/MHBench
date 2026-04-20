@@ -210,6 +210,12 @@ class NetworkDeployer:
                         self._conn.network.remove_interface_from_router(router.id, subnet_id=os_subnet.id)
                     except Exception:
                         pass
+            for port in self._conn.network.ports(device_id=router.id, project_id=pid):
+                if port.device_owner == "network:router_interface":
+                    try:
+                        self._conn.network.remove_interface_from_router(router.id, port_id=port.id)
+                    except Exception:
+                        pass
             self._conn.network.delete_router(router.id)
             logger.info("Deleted router")
 
