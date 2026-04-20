@@ -13,6 +13,8 @@ from src.playbooks.playbook_registry_service import PlaybookRegistryService
 
 logger = logging.getLogger(__name__)
 
+_MHBENCH_DIR = Path(__file__).resolve().parent.parent.parent
+
 
 class AnsibleRunner:
 
@@ -25,6 +27,23 @@ class AnsibleRunner:
         self._ssh_key_path = config.openstack.ssh_key_path
         self._online = online_registry
         self._playbook_registry = playbook_registry
+        c2c = getattr(config, "c2c", None)
+        self._c2c_vars: dict = {"caldera_ip": c2c.ip, "caldera_port": c2c.port} if c2c else {}
+
+    def _run_playbook(self, pb_name: str, inventory: dict, extravars: dict, tmp: str, project_dir: str) -> None:
+        pb_path = self._playbook_registry.get_path(pb_name)
+        result = ansible_runner.run(
+            private_data_dir=tmp,
+            project_dir=project_dir,
+            playbook=pb_path.name,
+            inventory=inventory,
+            extravars=extravars,
+        )
+        if result.status != "successful":
+            stderr = result.stderr.read() if result.stderr else ""
+            raise RuntimeError(
+                f"Playbook '{pb_name}' failed (status: {result.status}).\n{stderr}"
+            )
 
     def run(self, topology: NetworkTopology, mgmt_floating_ip: str) -> None:
         hosts = topology.get_all_hosts()
@@ -60,7 +79,7 @@ class AnsibleRunner:
                     "ssh_key_path": self._ssh_key_path,
                 }))
                 for pb_name in runtime_pbs:
-                    queue.append((host.name, pb_name, {}))
+                    queue.append((host.name, pb_name, {"user": "root", **self._c2c_vars}))
         for pb in topology.playbooks:
             queue.append((None, pb.name, pb.args))
 
@@ -68,26 +87,20 @@ class AnsibleRunner:
             logger.info("No playbooks to run.")
             return
 
-        with tempfile.TemporaryDirectory() as tmp:
-            first_pb = self._playbook_registry.get_path(queue[0][1])
-            (Path(tmp) / "project").symlink_to(first_pb.resolve().parent)
+        first_pb = self._playbook_registry.get_path(queue[0][1])
+        project_dir = str((_MHBENCH_DIR / first_pb).resolve().parent)
 
+        with tempfile.TemporaryDirectory() as tmp:
             for host_name, pb_name, args in queue:
-                pb_path = self._playbook_registry.get_path(pb_name)
                 extravars = {"host": host_name, **args} if host_name else args
                 if host_name:
                     logger.info("Running playbook '%s' on '%s'", pb_name, host_name)
                 else:
                     logger.info("Running topology playbook '%s'", pb_name)
-
-                result = ansible_runner.run(
-                    private_data_dir=tmp,
-                    playbook=pb_path.name,
-                    inventory={"all": {"hosts": inventory_hosts}},
-                    extravars=extravars,
+                self._run_playbook(
+                    pb_name,
+                    {"all": {"hosts": inventory_hosts}},
+                    extravars,
+                    tmp,
+                    project_dir,
                 )
-                if result.status != "successful":
-                    stderr = result.stderr.read() if result.stderr else ""
-                    raise RuntimeError(
-                        f"Playbook '{pb_name}' failed on '{host_name}' (status: {result.status}).\n{stderr}"
-                    )
