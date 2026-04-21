@@ -130,10 +130,18 @@ class NetworkDeployer:
                         pass
                     time.sleep(1)
             else:
-                for direction in ("ingress", "egress"):
+                egress_prefix = "0.0.0.0/0" if subnet.internet_egress else str(subnet.cidr)
+                try:
+                    self._conn.network.create_security_group_rule(
+                        security_group_id=sg.id, direction="egress", remote_ip_prefix=egress_prefix,
+                    )
+                except ConflictException:
+                    pass
+                time.sleep(1)
+                for prefix in [str(subnet.cidr)]:
                     try:
                         self._conn.network.create_security_group_rule(
-                            security_group_id=sg.id, direction=direction, remote_ip_prefix=str(subnet.cidr),
+                            security_group_id=sg.id, direction="ingress", remote_ip_prefix=prefix,
                         )
                     except ConflictException:
                         pass
@@ -147,24 +155,22 @@ class NetworkDeployer:
                 for peer_name in peers:
                     peer = topology.get_subnet_by_name(peer_name)
                     if peer:
-                        for direction in ("ingress", "egress"):
-                            try:
-                                self._conn.network.create_security_group_rule(
-                                    security_group_id=sg.id, direction=direction, remote_ip_prefix=str(peer.cidr),
-                                )
-                            except ConflictException:
-                                pass
-                            time.sleep(1)
-                if self._management:
-                    for direction in ("ingress", "egress"):
                         try:
                             self._conn.network.create_security_group_rule(
-                                security_group_id=sg.id, direction=direction,
-                                remote_ip_prefix=self._management.cidr,
+                                security_group_id=sg.id, direction="ingress", remote_ip_prefix=str(peer.cidr),
                             )
                         except ConflictException:
                             pass
                         time.sleep(1)
+                if self._management:
+                    try:
+                        self._conn.network.create_security_group_rule(
+                            security_group_id=sg.id, direction="ingress",
+                            remote_ip_prefix=self._management.cidr,
+                        )
+                    except ConflictException:
+                        pass
+                    time.sleep(1)
             logger.info("Security group '%s' ready", subnet.sg_name)
 
         if self._management:

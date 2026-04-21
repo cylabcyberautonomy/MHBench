@@ -37,6 +37,7 @@ class Subnet(BaseModel):
     dns_servers: list[str] = Field(default_factory=lambda: ["8.8.8.8"])
     hosts: list[Host] = Field(default_factory=list)
     external: bool = False
+    internet_egress: bool = True
 
     @computed_field
     @property
