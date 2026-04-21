@@ -54,7 +54,7 @@
         dest: "~/.ssh/config"
         content: |
           Host {{ follower_user }}
-            HostName {{ follower }}
+            HostName {{ hostvars[follower]['ansible_host'] }}
             User {{ follower_user }}
             IdentityFile ~/.ssh/id_ed25519
         create: true
