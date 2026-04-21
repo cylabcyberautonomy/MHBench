@@ -11,3 +11,6 @@ dependencies = [
     "pydantic>=2.12.0",
     "pyyaml>=6.0",
 ]
+
+[project.scripts]
+mhbench = "cli:cli"
