@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import tempfile
 from pathlib import Path
 
@@ -32,12 +33,19 @@ class AnsibleRunner:
 
     def _run_playbook(self, pb_name: str, inventory: dict, extravars: dict, tmp: str, project_dir: str) -> None:
         pb_path = self._playbook_registry.get_path(pb_name)
+        def _stream(event: dict) -> bool:
+            line = event.get("stdout", "")
+            if line:
+                print(line, end="", flush=True)
+            return True
+
         result = ansible_runner.run(
             private_data_dir=tmp,
             project_dir=project_dir,
             playbook=pb_path.name,
             inventory=inventory,
             extravars=extravars,
+            event_handler=_stream,
         )
         if result.status != "successful":
             stderr = result.stderr.read() if result.stderr else ""
