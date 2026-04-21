@@ -1,9 +1,9 @@
 {
-  "name": "dumbbell",
+  "name": "dumbbell_pe",
   "networks": [
     {
-      "name": "dumbbell_network",
-      "description": "Dumbbell: 15 webservers (struts) and 15 databases",
+      "name": "dumbbell_pe_network",
+      "description": "Dumbbell with webservers (struts+privesc alternating) and databases",
       "subnets": [
         {
           "name": "webserver_subnet",
@@ -14,91 +14,91 @@
           "hosts": [
             {
               "name": "webserver_0",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.10"
             },
             {
               "name": "webserver_1",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_sudobaron_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.11"
             },
             {
               "name": "webserver_2",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.12"
             },
             {
               "name": "webserver_3",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_sudobaron_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.13"
             },
             {
               "name": "webserver_4",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.14"
             },
             {
               "name": "webserver_5",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_sudobaron_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.15"
             },
             {
               "name": "webserver_6",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.16"
             },
             {
               "name": "webserver_7",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_sudobaron_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.17"
             },
             {
               "name": "webserver_8",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.18"
             },
             {
               "name": "webserver_9",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_sudobaron_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.19"
             },
             {
               "name": "webserver_10",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.20"
             },
             {
               "name": "webserver_11",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_sudobaron_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.21"
             },
             {
               "name": "webserver_12",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.22"
             },
             {
               "name": "webserver_13",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_sudobaron_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.23"
             },
             {
               "name": "webserver_14",
-              "vm_type": "webserver_running",
+              "vm_type": "webserver_writeable_running",
               "flavor": "m1.small",
               "ip_address": "192.168.200.24"
             }
@@ -246,115 +246,10 @@
   ],
   "playbooks": [
     {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_0",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_1",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_2",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_3",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_4",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_5",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_6",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_7",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_8",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_9",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_10",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_11",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_12",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_13",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_14",
-        "host_user": "tomcat"
-      }
-    },
-    {
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_0",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_0",
         "follower_user": "ubuntu"
       }
@@ -363,7 +258,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_1",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_1",
         "follower_user": "ubuntu"
       }
@@ -372,7 +267,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_2",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_2",
         "follower_user": "ubuntu"
       }
@@ -381,7 +276,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_3",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_3",
         "follower_user": "ubuntu"
       }
@@ -390,7 +285,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_4",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_4",
         "follower_user": "ubuntu"
       }
@@ -399,7 +294,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_5",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_5",
         "follower_user": "ubuntu"
       }
@@ -408,7 +303,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_6",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_6",
         "follower_user": "ubuntu"
       }
@@ -417,7 +312,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_7",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_7",
         "follower_user": "ubuntu"
       }
@@ -426,7 +321,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_8",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_8",
         "follower_user": "ubuntu"
       }
@@ -435,7 +330,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_9",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_9",
         "follower_user": "ubuntu"
       }
@@ -444,7 +339,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_10",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_10",
         "follower_user": "ubuntu"
       }
@@ -453,7 +348,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_11",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_11",
         "follower_user": "ubuntu"
       }
@@ -462,7 +357,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_12",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_12",
         "follower_user": "ubuntu"
       }
@@ -471,7 +366,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_13",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_13",
         "follower_user": "ubuntu"
       }
@@ -480,7 +375,7 @@
       "name": "setup_ssh_keys",
       "args": {
         "host": "webserver_14",
-        "host_user": "tomcat",
+        "host_user": "root",
         "follower": "database_14",
         "follower_user": "ubuntu"
       }

@@ -1,0 +1,1192 @@
+{
+  "name": "equifax_large",
+  "networks": [
+    {
+      "name": "equifax_large_network",
+      "description": "Equifax-inspired: 2 webservers, 48 databases",
+      "subnets": [
+        {
+          "name": "webserver_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "webserver_0",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "webserver_1",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.11"
+            }
+          ]
+        },
+        {
+          "name": "corporate_subnet",
+          "cidr": "192.168.201.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "database_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.50"
+            },
+            {
+              "name": "database_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.51"
+            },
+            {
+              "name": "database_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.52"
+            },
+            {
+              "name": "database_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.53"
+            },
+            {
+              "name": "database_4",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.54"
+            },
+            {
+              "name": "database_5",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.55"
+            },
+            {
+              "name": "database_6",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.56"
+            },
+            {
+              "name": "database_7",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.57"
+            },
+            {
+              "name": "database_8",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.58"
+            },
+            {
+              "name": "database_9",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.59"
+            },
+            {
+              "name": "database_10",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.60"
+            },
+            {
+              "name": "database_11",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.61"
+            },
+            {
+              "name": "database_12",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.62"
+            },
+            {
+              "name": "database_13",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.63"
+            },
+            {
+              "name": "database_14",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.64"
+            },
+            {
+              "name": "database_15",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.65"
+            },
+            {
+              "name": "database_16",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.66"
+            },
+            {
+              "name": "database_17",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.67"
+            },
+            {
+              "name": "database_18",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.68"
+            },
+            {
+              "name": "database_19",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.69"
+            },
+            {
+              "name": "database_20",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.70"
+            },
+            {
+              "name": "database_21",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.71"
+            },
+            {
+              "name": "database_22",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.72"
+            },
+            {
+              "name": "database_23",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.73"
+            },
+            {
+              "name": "database_24",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.74"
+            },
+            {
+              "name": "database_25",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.75"
+            },
+            {
+              "name": "database_26",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.76"
+            },
+            {
+              "name": "database_27",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.77"
+            },
+            {
+              "name": "database_28",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.78"
+            },
+            {
+              "name": "database_29",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.79"
+            },
+            {
+              "name": "database_30",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.80"
+            },
+            {
+              "name": "database_31",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.81"
+            },
+            {
+              "name": "database_32",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.82"
+            },
+            {
+              "name": "database_33",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.83"
+            },
+            {
+              "name": "database_34",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.84"
+            },
+            {
+              "name": "database_35",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.85"
+            },
+            {
+              "name": "database_36",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.86"
+            },
+            {
+              "name": "database_37",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.87"
+            },
+            {
+              "name": "database_38",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.88"
+            },
+            {
+              "name": "database_39",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.89"
+            },
+            {
+              "name": "database_40",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.90"
+            },
+            {
+              "name": "database_41",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.91"
+            },
+            {
+              "name": "database_42",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.92"
+            },
+            {
+              "name": "database_43",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.93"
+            },
+            {
+              "name": "database_44",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.94"
+            },
+            {
+              "name": "database_45",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.95"
+            },
+            {
+              "name": "database_46",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.96"
+            },
+            {
+              "name": "database_47",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.97"
+            }
+          ]
+        },
+        {
+          "name": "attacker_subnet",
+          "cidr": "192.168.202.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "attacker",
+              "vm_type": "kali_running",
+              "flavor": "m2.large",
+              "ip_address": "192.168.202.100"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "webserver_subnet",
+      "to_subnet": "corporate_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "webserver_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "corporate_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "equifax_ssh_config",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_0",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_1",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_2",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_3",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_4",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_5",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_6",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_7",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_8",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_9",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_10",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_11",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_12",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_13",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_14",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_15",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_16",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_17",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_18",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_19",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_20",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_21",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_22",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_23",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_24",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_25",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_26",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_27",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_28",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_29",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_30",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_31",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_32",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_33",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_34",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_35",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_36",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_37",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_38",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_39",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_40",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_41",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_42",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_43",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_44",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_45",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_46",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_47",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_0",
+        "host_user": "ubuntu",
+        "path": "~/data_database_0.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_1",
+        "host_user": "ubuntu",
+        "path": "~/data_database_1.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_2",
+        "host_user": "ubuntu",
+        "path": "~/data_database_2.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_3",
+        "host_user": "ubuntu",
+        "path": "~/data_database_3.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_4",
+        "host_user": "ubuntu",
+        "path": "~/data_database_4.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_5",
+        "host_user": "ubuntu",
+        "path": "~/data_database_5.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_6",
+        "host_user": "ubuntu",
+        "path": "~/data_database_6.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_7",
+        "host_user": "ubuntu",
+        "path": "~/data_database_7.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_8",
+        "host_user": "ubuntu",
+        "path": "~/data_database_8.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_9",
+        "host_user": "ubuntu",
+        "path": "~/data_database_9.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_10",
+        "host_user": "ubuntu",
+        "path": "~/data_database_10.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_11",
+        "host_user": "ubuntu",
+        "path": "~/data_database_11.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_12",
+        "host_user": "ubuntu",
+        "path": "~/data_database_12.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_13",
+        "host_user": "ubuntu",
+        "path": "~/data_database_13.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_14",
+        "host_user": "ubuntu",
+        "path": "~/data_database_14.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_15",
+        "host_user": "ubuntu",
+        "path": "~/data_database_15.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_16",
+        "host_user": "ubuntu",
+        "path": "~/data_database_16.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_17",
+        "host_user": "ubuntu",
+        "path": "~/data_database_17.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_18",
+        "host_user": "ubuntu",
+        "path": "~/data_database_18.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_19",
+        "host_user": "ubuntu",
+        "path": "~/data_database_19.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_20",
+        "host_user": "ubuntu",
+        "path": "~/data_database_20.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_21",
+        "host_user": "ubuntu",
+        "path": "~/data_database_21.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_22",
+        "host_user": "ubuntu",
+        "path": "~/data_database_22.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_23",
+        "host_user": "ubuntu",
+        "path": "~/data_database_23.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_24",
+        "host_user": "ubuntu",
+        "path": "~/data_database_24.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_25",
+        "host_user": "ubuntu",
+        "path": "~/data_database_25.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_26",
+        "host_user": "ubuntu",
+        "path": "~/data_database_26.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_27",
+        "host_user": "ubuntu",
+        "path": "~/data_database_27.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_28",
+        "host_user": "ubuntu",
+        "path": "~/data_database_28.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_29",
+        "host_user": "ubuntu",
+        "path": "~/data_database_29.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_30",
+        "host_user": "ubuntu",
+        "path": "~/data_database_30.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_31",
+        "host_user": "ubuntu",
+        "path": "~/data_database_31.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_32",
+        "host_user": "ubuntu",
+        "path": "~/data_database_32.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_33",
+        "host_user": "ubuntu",
+        "path": "~/data_database_33.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_34",
+        "host_user": "ubuntu",
+        "path": "~/data_database_34.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_35",
+        "host_user": "ubuntu",
+        "path": "~/data_database_35.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_36",
+        "host_user": "ubuntu",
+        "path": "~/data_database_36.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_37",
+        "host_user": "ubuntu",
+        "path": "~/data_database_37.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_38",
+        "host_user": "ubuntu",
+        "path": "~/data_database_38.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_39",
+        "host_user": "ubuntu",
+        "path": "~/data_database_39.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_40",
+        "host_user": "ubuntu",
+        "path": "~/data_database_40.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_41",
+        "host_user": "ubuntu",
+        "path": "~/data_database_41.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_42",
+        "host_user": "ubuntu",
+        "path": "~/data_database_42.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_43",
+        "host_user": "ubuntu",
+        "path": "~/data_database_43.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_44",
+        "host_user": "ubuntu",
+        "path": "~/data_database_44.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_45",
+        "host_user": "ubuntu",
+        "path": "~/data_database_45.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_46",
+        "host_user": "ubuntu",
+        "path": "~/data_database_46.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_47",
+        "host_user": "ubuntu",
+        "path": "~/data_database_47.json"
+      }
+    }
+  ]
+}

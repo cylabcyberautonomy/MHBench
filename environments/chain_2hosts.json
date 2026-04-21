@@ -1,0 +1,92 @@
+{
+  "name": "chain_2hosts",
+  "networks": [
+    {
+      "name": "chain_2hosts_network",
+      "description": "Chain of 2 hosts",
+      "subnets": [
+        {
+          "name": "ring_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "host_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "host_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.11"
+            }
+          ]
+        },
+        {
+          "name": "attacker_subnet",
+          "cidr": "192.168.202.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "attacker",
+              "vm_type": "kali_running",
+              "flavor": "m2.large",
+              "ip_address": "192.168.202.100"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "ring_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_0",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "host_0",
+        "host_user": "ubuntu",
+        "follower": "host_1",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_0",
+        "host_user": "ubuntu",
+        "path": "~/data_host_0.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_1",
+        "host_user": "ubuntu",
+        "path": "~/data_host_1.json"
+      }
+    }
+  ]
+}

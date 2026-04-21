@@ -1,0 +1,431 @@
+{
+  "name": "demo_network_18_topology",
+  "networks": [
+    {
+      "name": "demo_network_18",
+      "description": "Generated network with 4 subnets",
+      "subnets": [
+        {
+          "name": "subnet_0",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "host_0_subnet_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "host_1_subnet_0",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.11"
+            },
+            {
+              "name": "host_2_subnet_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.12"
+            },
+            {
+              "name": "host_3_subnet_0",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.13"
+            },
+            {
+              "name": "host_4_subnet_0",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.14"
+            },
+            {
+              "name": "host_5_subnet_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.15"
+            },
+            {
+              "name": "host_6_subnet_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.16"
+            },
+            {
+              "name": "host_7_subnet_0",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.17"
+            },
+            {
+              "name": "host_8_subnet_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.18"
+            },
+            {
+              "name": "host_9_subnet_0",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.19"
+            },
+            {
+              "name": "host_10_subnet_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.20"
+            },
+            {
+              "name": "host_11_subnet_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.21"
+            },
+            {
+              "name": "host_12_subnet_0",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.22"
+            }
+          ],
+          "external": true
+        },
+        {
+          "name": "subnet_1",
+          "cidr": "192.168.201.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "host_0_subnet_1",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.10"
+            },
+            {
+              "name": "host_1_subnet_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.11"
+            },
+            {
+              "name": "host_2_subnet_1",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.12"
+            },
+            {
+              "name": "host_3_subnet_1",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.13"
+            },
+            {
+              "name": "host_4_subnet_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.14"
+            },
+            {
+              "name": "host_5_subnet_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.15"
+            },
+            {
+              "name": "host_6_subnet_1",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.16"
+            },
+            {
+              "name": "host_7_subnet_1",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.17"
+            },
+            {
+              "name": "host_8_subnet_1",
+              "vm_type": "ubuntu_netcat_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.18"
+            },
+            {
+              "name": "host_9_subnet_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.19"
+            }
+          ]
+        },
+        {
+          "name": "subnet_2",
+          "cidr": "192.168.202.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "host_0_subnet_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.10"
+            },
+            {
+              "name": "host_1_subnet_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.11"
+            },
+            {
+              "name": "host_2_subnet_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.12"
+            },
+            {
+              "name": "host_3_subnet_2",
+              "vm_type": "webserver_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.13"
+            },
+            {
+              "name": "host_4_subnet_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.14"
+            },
+            {
+              "name": "host_5_subnet_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.15"
+            },
+            {
+              "name": "host_6_subnet_2",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.16"
+            },
+            {
+              "name": "host_7_subnet_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.202.17"
+            }
+          ]
+        },
+        {
+          "name": "subnet_3",
+          "cidr": "192.168.203.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "host_0_subnet_3",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.10"
+            },
+            {
+              "name": "host_1_subnet_3",
+              "vm_type": "ubuntu_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.11"
+            },
+            {
+              "name": "host_2_subnet_3",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.12"
+            },
+            {
+              "name": "host_3_subnet_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.13"
+            },
+            {
+              "name": "host_4_subnet_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.14"
+            },
+            {
+              "name": "host_5_subnet_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.15"
+            },
+            {
+              "name": "host_6_subnet_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.16"
+            },
+            {
+              "name": "host_7_subnet_3",
+              "vm_type": "ubuntu_netcat_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.17"
+            },
+            {
+              "name": "host_8_subnet_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.18"
+            },
+            {
+              "name": "host_9_subnet_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.19"
+            }
+          ]
+        },
+        {
+          "name": "attacker_subnet",
+          "cidr": "10.0.0.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "external_attacker",
+              "vm_type": "kali_running",
+              "flavor": "m1.small",
+              "ip_address": "10.0.0.10"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "subnet_0",
+      "to_subnet": "subnet_1",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "subnet_1",
+      "to_subnet": "subnet_2",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "subnet_1",
+      "to_subnet": "subnet_3",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "subnet_0",
+      "to_subnet": "subnet_2",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "subnet_2",
+      "to_subnet": "subnet_3",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "host_9_subnet_0",
+        "host_user": "user_9",
+        "follower": "host_3_subnet_1",
+        "follower_user": "user_3"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "host_3_subnet_3",
+        "host_user": "user_3",
+        "follower": "host_1_subnet_3",
+        "follower_user": "user_1"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "host_3_subnet_1",
+        "host_user": "user_3",
+        "follower": "host_3_subnet_3",
+        "follower_user": "user_3"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_2_subnet_1",
+        "host_user": "user_2",
+        "path": "/home/user_2/data_host_2_subnet_1.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_7_subnet_1",
+        "host_user": "user_7",
+        "path": "/home/user_7/data_host_7_subnet_1.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_8_subnet_1",
+        "host_user": "root",
+        "path": "/root/data_host_8_subnet_1.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_3_subnet_2",
+        "host_user": "root",
+        "path": "/root/data_host_3_subnet_2.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_0_subnet_3",
+        "host_user": "user_0",
+        "path": "/home/user_0/data_host_0_subnet_3.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_1_subnet_3",
+        "host_user": "root",
+        "path": "/root/data_host_1_subnet_3.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_7_subnet_3",
+        "host_user": "root",
+        "path": "/root/data_host_7_subnet_3.json"
+      }
+    }
+  ]
+}

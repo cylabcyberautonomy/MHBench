@@ -1,0 +1,180 @@
+{
+  "name": "equifax_small",
+  "networks": [
+    {
+      "name": "equifax_small_network",
+      "description": "Equifax-inspired: 2 webservers, 4 databases",
+      "subnets": [
+        {
+          "name": "webserver_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "webserver_0",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "webserver_1",
+              "vm_type": "webserver_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.11"
+            }
+          ]
+        },
+        {
+          "name": "corporate_subnet",
+          "cidr": "192.168.201.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "database_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.50"
+            },
+            {
+              "name": "database_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.51"
+            },
+            {
+              "name": "database_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.52"
+            },
+            {
+              "name": "database_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.53"
+            }
+          ]
+        },
+        {
+          "name": "attacker_subnet",
+          "cidr": "192.168.202.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "attacker",
+              "vm_type": "kali_running",
+              "flavor": "m2.large",
+              "ip_address": "192.168.202.100"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "webserver_subnet",
+      "to_subnet": "corporate_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "webserver_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "corporate_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "equifax_ssh_config",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_0",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_1",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_2",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver_0",
+        "host_user": "tomcat",
+        "follower": "database_3",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_0",
+        "host_user": "ubuntu",
+        "path": "~/data_database_0.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_1",
+        "host_user": "ubuntu",
+        "path": "~/data_database_1.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_2",
+        "host_user": "ubuntu",
+        "path": "~/data_database_2.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database_3",
+        "host_user": "ubuntu",
+        "path": "~/data_database_3.json"
+      }
+    }
+  ]
+}

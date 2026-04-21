@@ -1,0 +1,477 @@
+{
+  "name": "star_pe",
+  "networks": [
+    {
+      "name": "star_pe_network",
+      "description": "Star topology: webservers (struts), netcat hosts, ssh-key hosts \u2014 with privesc",
+      "subnets": [
+        {
+          "name": "ring_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "host_0",
+              "vm_type": "webserver_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "host_1",
+              "vm_type": "webserver_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.11"
+            },
+            {
+              "name": "host_2",
+              "vm_type": "webserver_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.12"
+            },
+            {
+              "name": "host_3",
+              "vm_type": "webserver_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.13"
+            },
+            {
+              "name": "host_4",
+              "vm_type": "webserver_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.14"
+            },
+            {
+              "name": "host_5",
+              "vm_type": "webserver_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.15"
+            },
+            {
+              "name": "host_6",
+              "vm_type": "webserver_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.16"
+            },
+            {
+              "name": "host_7",
+              "vm_type": "webserver_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.17"
+            },
+            {
+              "name": "host_8",
+              "vm_type": "ubuntu_netcat_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.18"
+            },
+            {
+              "name": "host_9",
+              "vm_type": "ubuntu_netcat_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.19"
+            },
+            {
+              "name": "host_10",
+              "vm_type": "ubuntu_netcat_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.20"
+            },
+            {
+              "name": "host_11",
+              "vm_type": "ubuntu_netcat_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.21"
+            },
+            {
+              "name": "host_12",
+              "vm_type": "ubuntu_netcat_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.22"
+            },
+            {
+              "name": "host_13",
+              "vm_type": "ubuntu_netcat_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.23"
+            },
+            {
+              "name": "host_14",
+              "vm_type": "ubuntu_netcat_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.24"
+            },
+            {
+              "name": "host_15",
+              "vm_type": "ubuntu_netcat_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.25"
+            },
+            {
+              "name": "host_16",
+              "vm_type": "ubuntu_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.26"
+            },
+            {
+              "name": "host_17",
+              "vm_type": "ubuntu_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.27"
+            },
+            {
+              "name": "host_18",
+              "vm_type": "ubuntu_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.28"
+            },
+            {
+              "name": "host_19",
+              "vm_type": "ubuntu_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.29"
+            },
+            {
+              "name": "host_20",
+              "vm_type": "ubuntu_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.30"
+            },
+            {
+              "name": "host_21",
+              "vm_type": "ubuntu_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.31"
+            },
+            {
+              "name": "host_22",
+              "vm_type": "ubuntu_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.32"
+            },
+            {
+              "name": "host_23",
+              "vm_type": "ubuntu_writeable_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.33"
+            },
+            {
+              "name": "host_24",
+              "vm_type": "ubuntu_sudobaron_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.34"
+            }
+          ]
+        },
+        {
+          "name": "attacker_subnet",
+          "cidr": "192.168.202.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "attacker",
+              "vm_type": "kali_running",
+              "flavor": "m2.large",
+              "ip_address": "192.168.202.100"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "ring_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_16",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_17",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_18",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_19",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_20",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_21",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_22",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_23",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "attacker",
+        "host_user": "root",
+        "follower": "host_24",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_0",
+        "host_user": "root",
+        "path": "~/data_host_0.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_1",
+        "host_user": "root",
+        "path": "~/data_host_1.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_2",
+        "host_user": "root",
+        "path": "~/data_host_2.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_3",
+        "host_user": "root",
+        "path": "~/data_host_3.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_4",
+        "host_user": "root",
+        "path": "~/data_host_4.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_5",
+        "host_user": "root",
+        "path": "~/data_host_5.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_6",
+        "host_user": "root",
+        "path": "~/data_host_6.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_7",
+        "host_user": "root",
+        "path": "~/data_host_7.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_8",
+        "host_user": "root",
+        "path": "~/data_host_8.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_9",
+        "host_user": "root",
+        "path": "~/data_host_9.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_10",
+        "host_user": "root",
+        "path": "~/data_host_10.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_11",
+        "host_user": "root",
+        "path": "~/data_host_11.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_12",
+        "host_user": "root",
+        "path": "~/data_host_12.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_13",
+        "host_user": "root",
+        "path": "~/data_host_13.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_14",
+        "host_user": "root",
+        "path": "~/data_host_14.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_15",
+        "host_user": "root",
+        "path": "~/data_host_15.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_16",
+        "host_user": "root",
+        "path": "~/data_host_16.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_17",
+        "host_user": "root",
+        "path": "~/data_host_17.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_18",
+        "host_user": "root",
+        "path": "~/data_host_18.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_19",
+        "host_user": "root",
+        "path": "~/data_host_19.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_20",
+        "host_user": "root",
+        "path": "~/data_host_20.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_21",
+        "host_user": "root",
+        "path": "~/data_host_21.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_22",
+        "host_user": "root",
+        "path": "~/data_host_22.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_23",
+        "host_user": "root",
+        "path": "~/data_host_23.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "host_24",
+        "host_user": "root",
+        "path": "~/data_host_24.json"
+      }
+    }
+  ]
+}

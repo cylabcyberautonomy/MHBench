@@ -1,0 +1,784 @@
+{
+  "name": "ics",
+  "networks": [
+    {
+      "name": "ics_network",
+      "description": "ICS-inspired: two employee subnets, OT subnet with sensors and control hosts",
+      "subnets": [
+        {
+          "name": "employee_one_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "employee_A_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "employee_A_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.11"
+            },
+            {
+              "name": "employee_A_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.12"
+            },
+            {
+              "name": "employee_A_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.13"
+            },
+            {
+              "name": "employee_A_4",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.14"
+            },
+            {
+              "name": "employee_A_5",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.15"
+            },
+            {
+              "name": "employee_A_6",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.16"
+            },
+            {
+              "name": "employee_A_7",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.17"
+            },
+            {
+              "name": "employee_A_8",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.18"
+            },
+            {
+              "name": "employee_A_9",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.19"
+            },
+            {
+              "name": "manage_A_0",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small"
+            }
+          ]
+        },
+        {
+          "name": "employee_two_subnet",
+          "cidr": "192.168.201.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "employee_B_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.10"
+            },
+            {
+              "name": "employee_B_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.11"
+            },
+            {
+              "name": "employee_B_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.12"
+            },
+            {
+              "name": "employee_B_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.13"
+            },
+            {
+              "name": "employee_B_4",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.14"
+            },
+            {
+              "name": "employee_B_5",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.15"
+            },
+            {
+              "name": "employee_B_6",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.16"
+            },
+            {
+              "name": "employee_B_7",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.17"
+            },
+            {
+              "name": "employee_B_8",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.18"
+            },
+            {
+              "name": "employee_B_9",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.19"
+            },
+            {
+              "name": "manage_B_0",
+              "vm_type": "ubuntu_netcat_running",
+              "flavor": "m1.small"
+            }
+          ]
+        },
+        {
+          "name": "OT_subnet",
+          "cidr": "192.168.203.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "sensor_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.10"
+            },
+            {
+              "name": "sensor_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.11"
+            },
+            {
+              "name": "sensor_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.12"
+            },
+            {
+              "name": "sensor_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.13"
+            },
+            {
+              "name": "sensor_4",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.14"
+            },
+            {
+              "name": "sensor_5",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.15"
+            },
+            {
+              "name": "sensor_6",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.16"
+            },
+            {
+              "name": "sensor_7",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.17"
+            },
+            {
+              "name": "sensor_8",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.18"
+            },
+            {
+              "name": "sensor_9",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.19"
+            },
+            {
+              "name": "sensor_10",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.20"
+            },
+            {
+              "name": "sensor_11",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.21"
+            },
+            {
+              "name": "sensor_12",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.22"
+            },
+            {
+              "name": "sensor_13",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.23"
+            },
+            {
+              "name": "sensor_14",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.24"
+            },
+            {
+              "name": "sensor_15",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.25"
+            },
+            {
+              "name": "sensor_16",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.26"
+            },
+            {
+              "name": "sensor_17",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.27"
+            },
+            {
+              "name": "sensor_18",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.28"
+            },
+            {
+              "name": "sensor_19",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.29"
+            },
+            {
+              "name": "control_host_0",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.50"
+            },
+            {
+              "name": "control_host_1",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.51"
+            },
+            {
+              "name": "control_host_2",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.52"
+            },
+            {
+              "name": "control_host_3",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.53"
+            },
+            {
+              "name": "control_host_4",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m1.small",
+              "ip_address": "192.168.203.54"
+            }
+          ]
+        },
+        {
+          "name": "attacker_subnet",
+          "cidr": "192.168.202.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "attacker",
+              "vm_type": "kali_running",
+              "flavor": "m2.large",
+              "ip_address": "192.168.202.100"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "employee_one_subnet",
+      "to_subnet": "employee_two_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "employee_one_subnet",
+      "to_subnet": "OT_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "employee_one_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "employee_two_subnet",
+      "to_subnet": "OT_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "employee_two_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "OT_subnet",
+      "to_subnet": "attacker_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_0",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_1",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_2",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_3",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_4",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_5",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_6",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_7",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_8",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_9",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_10",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_11",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_12",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_13",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_14",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_15",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_16",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_17",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_18",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_A_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_19",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_0",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_1",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_2",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_3",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_4",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_5",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_6",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_7",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_8",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_9",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_10",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_11",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_12",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_13",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_14",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_15",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_16",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_17",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_18",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "manage_B_0",
+        "host_user": "ubuntu",
+        "follower": "sensor_19",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "sensor_0",
+        "host_user": "ubuntu",
+        "follower": "control_host_0",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "sensor_1",
+        "host_user": "ubuntu",
+        "follower": "control_host_1",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "sensor_2",
+        "host_user": "ubuntu",
+        "follower": "control_host_2",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "sensor_3",
+        "host_user": "ubuntu",
+        "follower": "control_host_3",
+        "follower_user": "ubuntu"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "sensor_4",
+        "host_user": "ubuntu",
+        "follower": "control_host_4",
+        "follower_user": "ubuntu"
+      }
+    }
+  ]
+}
