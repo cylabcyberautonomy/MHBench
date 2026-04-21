@@ -20,14 +20,17 @@ class PlaybooksConfig(BaseModel):
 
 
 class OpenStackConfig(BaseModel):
-    auth_url: str
-    username: str
-    password: str
-    project_name: str
-    region: str
-    ssh_key_name: str
+    model_config = {"extra": "allow"}
+
+    cloud: str = "openstack"
+    clouds_yaml: Optional[str] = None
+    keypair_name: str
     ssh_key_path: str
-    client_timeout: int = 7200
+    ssh_user: str = "ubuntu"
+    floating_ip_pool: Optional[str] = None
+    kali_image: Optional[str] = None
+    kali_flavor: Optional[str] = None
+    external_network: Optional[str] = None
 
 
 class ManagementConfig(BaseModel):
@@ -37,12 +40,18 @@ class ManagementConfig(BaseModel):
     flavor: str
 
 
+class C2CConfig(BaseModel):
+    ip: str
+    port: int = 8888
+
+
 class Config(BaseModel):
     compilation: CompilationConfig
     registry: RegistryConfig
     playbooks: PlaybooksConfig
     openstack: Optional[OpenStackConfig] = None
     management: Optional[ManagementConfig] = None
+    c2c: Optional[C2CConfig] = None
 
     @classmethod
     def load(cls, config_path: Path = CONFIG_PATH) -> "Config":
