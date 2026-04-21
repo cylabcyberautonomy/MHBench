@@ -19,12 +19,16 @@ _POLL_INTERVAL = 5
 
 class HostDeployer:
 
-    def __init__(self, conn: Connection, config: Config, online_registry: OnlineRegistryService) -> None:
+    def __init__(self, conn: Connection, config: Config, online_registry: OnlineRegistryService, project_name: str | None = None) -> None:
         self._conn = conn
         self._project_id = conn.current_project_id
         self._ssh_key_name = config.openstack.keypair_name
         self._management = config.management
         self._online = online_registry
+        self._project_name = project_name
+
+    def _n(self, name: str) -> str:
+        return f"{self._project_name}-{name}" if self._project_name else name
 
     def deploy(self, topology: NetworkTopology) -> str | None:
         mgmt_floating_ip: str | None = None
@@ -38,31 +42,31 @@ class HostDeployer:
             flavor = self._conn.compute.find_flavor(mgmt.flavor)
             if not flavor:
                 raise RuntimeError(f"Flavor '{mgmt.flavor}' not found in OpenStack.")
-            os_mgmt_net = self._conn.network.find_network("management_network", project_id=self._project_id)
+            os_mgmt_net = self._conn.network.find_network(self._n("management_network"), project_id=self._project_id)
             if not os_mgmt_net:
-                raise RuntimeError("OpenStack network 'management_network' not found.")
+                raise RuntimeError(f"OpenStack network '{self._n('management_network')}' not found.")
 
             time.sleep(1)
             server = self._conn.compute.create_server(
-                name="management_host",
+                name=self._n("management_host"),
                 imageRef=image.id,
                 flavorRef=flavor.id,
                 networks=[{"uuid": os_mgmt_net.id, "fixed_ip": mgmt.host_ip}],
-                security_groups=[{"name": "management_sg"}],
+                security_groups=[{"name": self._n("management_sg")}],
                 key_name=self._ssh_key_name,
             )
             time.sleep(1)
             deadline = time.monotonic() + _DEPLOY_TIMEOUT
             while True:
                 if time.monotonic() > deadline:
-                    raise TimeoutError("management_host did not reach ACTIVE within timeout.")
+                    raise TimeoutError(f"'{self._n('management_host')}' did not reach ACTIVE within timeout.")
                 time.sleep(_POLL_INTERVAL)
                 current = self._conn.compute.get_server(server.id)
                 if current.status == "ACTIVE":
-                    logger.info("Active: management_host")
+                    logger.info("Active: %s", self._n("management_host"))
                     break
                 elif current.status == "ERROR":
-                    raise RuntimeError(f"management_host entered ERROR: {getattr(current, 'fault', 'unknown')}")
+                    raise RuntimeError(f"'{self._n('management_host')}' entered ERROR: {getattr(current, 'fault', 'unknown')}")
 
             ext_net = self._conn.network.find_network("external")
             if not ext_net:
@@ -93,9 +97,9 @@ class HostDeployer:
                 subnet = topology.get_subnet_for_host(host)
                 if not subnet:
                     raise RuntimeError(f"No subnet found for host '{host.name}'.")
-                os_net = self._conn.network.find_network(subnet.name, project_id=self._project_id)
+                os_net = self._conn.network.find_network(self._n(subnet.name), project_id=self._project_id)
                 if not os_net:
-                    raise RuntimeError(f"OpenStack network '{subnet.name}' not found.")
+                    raise RuntimeError(f"OpenStack network '{self._n(subnet.name)}' not found.")
 
                 network_spec: dict = {"uuid": os_net.id}
                 if host.ip_address:
@@ -103,15 +107,15 @@ class HostDeployer:
 
                 time.sleep(1)
                 server = self._conn.compute.create_server(
-                    name=host.name,
+                    name=self._n(host.name),
                     imageRef=image.id,
                     flavorRef=flavor.id,
                     networks=[network_spec],
-                    security_groups=[{"name": subnet.sg_name}],
+                    security_groups=[{"name": self._n(subnet.sg_name)}],
                     key_name=self._ssh_key_name,
                 )
                 pending[server.id] = host
-                logger.info("Submitted: %s", host.name)
+                logger.info("Submitted: %s", self._n(host.name))
 
             deadline = time.monotonic() + _DEPLOY_TIMEOUT
             while pending:
@@ -139,17 +143,17 @@ class HostDeployer:
         pending: dict[str, str] = {}
 
         if self._management:
-            for server in self._conn.compute.servers(name="management_host", project_id=self._project_id):
+            for server in self._conn.compute.servers(name=self._n("management_host"), project_id=self._project_id):
                 self._conn.compute.delete_server(server.id, force=True)
-                pending[server.id] = "management_host"
-                logger.info("Deleting: management_host")
+                pending[server.id] = self._n("management_host")
+                logger.info("Deleting: %s", self._n("management_host"))
 
         for host in topology.get_all_hosts():
-            matches = list(self._conn.compute.servers(name=host.name, project_id=self._project_id))
+            matches = list(self._conn.compute.servers(name=self._n(host.name), project_id=self._project_id))
             for server in matches:
                 self._conn.compute.delete_server(server.id, force=True)
-                pending[server.id] = host.name
-                logger.info("Deleting: %s", host.name)
+                pending[server.id] = self._n(host.name)
+                logger.info("Deleting: %s", self._n(host.name))
 
         deadline = time.monotonic() + _DELETE_TIMEOUT
         while pending:
