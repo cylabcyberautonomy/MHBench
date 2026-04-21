@@ -38,9 +38,9 @@ class HostDeployer:
             flavor = self._conn.compute.find_flavor(mgmt.flavor)
             if not flavor:
                 raise RuntimeError(f"Flavor '{mgmt.flavor}' not found in OpenStack.")
-            os_mgmt_net = self._conn.network.find_network(mgmt.network, project_id=self._project_id)
+            os_mgmt_net = self._conn.network.find_network("management_network", project_id=self._project_id)
             if not os_mgmt_net:
-                raise RuntimeError(f"OpenStack network '{mgmt.network}' not found.")
+                raise RuntimeError("OpenStack network 'management_network' not found.")
 
             time.sleep(1)
             server = self._conn.compute.create_server(
