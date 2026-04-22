@@ -46,6 +46,7 @@ class AnsibleRunner:
             inventory=inventory,
             extravars=extravars,
             event_handler=_stream,
+            quiet=True,
         )
         if result.status != "successful":
             stderr = result.stderr.read() if result.stderr else ""
