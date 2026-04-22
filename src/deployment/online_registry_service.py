@@ -19,7 +19,7 @@ class OnlineRegistryService:
         return [img["name"] for img in self._images]
 
     def get_playbooks(self, name: str) -> list[str]:
-        return list(self._lookup[name]["playbooks"])
+        return list(self._lookup[name]["playbooks"] or [])
 
     def get_ancestor_chain(self, name: str) -> list[str]:
         chain, current = [], name
@@ -53,7 +53,7 @@ class OnlineRegistryService:
             return []
         playbooks = []
         for entry_name in self.get_ancestor_chain(name):
-            playbooks.extend(self._lookup[entry_name]["playbooks"])
+            playbooks.extend(self._lookup[entry_name]["playbooks"] or [])
         return playbooks
 
     def _write(self) -> None:
