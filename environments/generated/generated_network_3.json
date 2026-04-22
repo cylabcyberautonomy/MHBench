@@ -118,7 +118,7 @@
             {
               "name": "external_attacker",
               "vm_type": "kali_running",
-              "flavor": "m1.small",
+              "flavor": "m2.large",
               "ip_address": "10.0.0.10"
             }
           ]
@@ -136,6 +136,132 @@
     }
   ],
   "playbooks": [
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_0_subnet_0",
+        "user": "user_0",
+        "password": "perry123",
+        "group": "user_0"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_1_subnet_0",
+        "user": "user_1",
+        "password": "perry123",
+        "group": "user_1"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_2_subnet_0",
+        "user": "user_2",
+        "password": "perry123",
+        "group": "user_2"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_3_subnet_0",
+        "user": "user_3",
+        "password": "perry123",
+        "group": "user_3"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_4_subnet_0",
+        "user": "user_4",
+        "password": "perry123",
+        "group": "user_4"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_5_subnet_0",
+        "user": "user_5",
+        "password": "perry123",
+        "group": "user_5"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_0_subnet_1",
+        "user": "user_0",
+        "password": "perry123",
+        "group": "user_0"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_1_subnet_1",
+        "user": "user_1",
+        "password": "perry123",
+        "group": "user_1"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_2_subnet_1",
+        "user": "user_2",
+        "password": "perry123",
+        "group": "user_2"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_3_subnet_1",
+        "user": "user_3",
+        "password": "perry123",
+        "group": "user_3"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_4_subnet_1",
+        "user": "user_4",
+        "password": "perry123",
+        "group": "user_4"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_5_subnet_1",
+        "user": "user_5",
+        "password": "perry123",
+        "group": "user_5"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_6_subnet_1",
+        "user": "user_6",
+        "password": "perry123",
+        "group": "user_6"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_7_subnet_1",
+        "user": "user_7",
+        "password": "perry123",
+        "group": "user_7"
+      }
+    },
     {
       "name": "setup_ssh_keys",
       "args": {

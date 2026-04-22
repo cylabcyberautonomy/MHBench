@@ -223,7 +223,7 @@
             {
               "name": "external_attacker",
               "vm_type": "kali_running",
-              "flavor": "m1.small",
+              "flavor": "m2.large",
               "ip_address": "10.0.0.10"
             }
           ]
@@ -248,6 +248,276 @@
     }
   ],
   "playbooks": [
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_0_subnet_0",
+        "user": "user_0",
+        "password": "perry123",
+        "group": "user_0"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_1_subnet_0",
+        "user": "user_1",
+        "password": "perry123",
+        "group": "user_1"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_2_subnet_0",
+        "user": "user_2",
+        "password": "perry123",
+        "group": "user_2"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_3_subnet_0",
+        "user": "user_3",
+        "password": "perry123",
+        "group": "user_3"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_4_subnet_0",
+        "user": "user_4",
+        "password": "perry123",
+        "group": "user_4"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_5_subnet_0",
+        "user": "user_5",
+        "password": "perry123",
+        "group": "user_5"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_6_subnet_0",
+        "user": "user_6",
+        "password": "perry123",
+        "group": "user_6"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_7_subnet_0",
+        "user": "user_7",
+        "password": "perry123",
+        "group": "user_7"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_8_subnet_0",
+        "user": "user_8",
+        "password": "perry123",
+        "group": "user_8"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_0_subnet_1",
+        "user": "user_0",
+        "password": "perry123",
+        "group": "user_0"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_1_subnet_1",
+        "user": "user_1",
+        "password": "perry123",
+        "group": "user_1"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_2_subnet_1",
+        "user": "user_2",
+        "password": "perry123",
+        "group": "user_2"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_3_subnet_1",
+        "user": "user_3",
+        "password": "perry123",
+        "group": "user_3"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_4_subnet_1",
+        "user": "user_4",
+        "password": "perry123",
+        "group": "user_4"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_5_subnet_1",
+        "user": "user_5",
+        "password": "perry123",
+        "group": "user_5"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_6_subnet_1",
+        "user": "user_6",
+        "password": "perry123",
+        "group": "user_6"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_7_subnet_1",
+        "user": "user_7",
+        "password": "perry123",
+        "group": "user_7"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_8_subnet_1",
+        "user": "user_8",
+        "password": "perry123",
+        "group": "user_8"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_9_subnet_1",
+        "user": "user_9",
+        "password": "perry123",
+        "group": "user_9"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_10_subnet_1",
+        "user": "user_10",
+        "password": "perry123",
+        "group": "user_10"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_11_subnet_1",
+        "user": "user_11",
+        "password": "perry123",
+        "group": "user_11"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_12_subnet_1",
+        "user": "user_12",
+        "password": "perry123",
+        "group": "user_12"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_13_subnet_1",
+        "user": "user_13",
+        "password": "perry123",
+        "group": "user_13"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_0_subnet_2",
+        "user": "user_0",
+        "password": "perry123",
+        "group": "user_0"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_1_subnet_2",
+        "user": "user_1",
+        "password": "perry123",
+        "group": "user_1"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_2_subnet_2",
+        "user": "user_2",
+        "password": "perry123",
+        "group": "user_2"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_3_subnet_2",
+        "user": "user_3",
+        "password": "perry123",
+        "group": "user_3"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_4_subnet_2",
+        "user": "user_4",
+        "password": "perry123",
+        "group": "user_4"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_5_subnet_2",
+        "user": "user_5",
+        "password": "perry123",
+        "group": "user_5"
+      }
+    },
+    {
+      "name": "create_user",
+      "args": {
+        "host": "host_6_subnet_2",
+        "user": "user_6",
+        "password": "perry123",
+        "group": "user_6"
+      }
+    },
     {
       "name": "add_data",
       "args": {

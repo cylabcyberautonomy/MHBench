@@ -7,3 +7,6 @@ config/config.yaml
 
 # Compilation
 *.qcow2
+
+generate_terraform_envs.py
+translate_envs.py
