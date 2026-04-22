@@ -30,6 +30,48 @@ class HostDeployer:
     def _n(self, name: str) -> str:
         return f"{self._project_name}-{name}" if self._project_name else name
 
+    def _log_instance_info(self, name: str, server, flavor, image) -> None:
+        img_size = getattr(image, "size", None)
+        img_size_str = f"{img_size / 1e9:.2f} GB" if img_size else "unknown"
+
+        networks = []
+        for net_name, addrs in (server.addresses or {}).items():
+            fixed = [a["addr"] for a in addrs if a.get("OS-EXT-IPS:type") == "fixed"]
+            floating = [a["addr"] for a in addrs if a.get("OS-EXT-IPS:type") == "floating"]
+            addr_str = ", ".join(fixed)
+            if floating:
+                addr_str += f"  (floating: {', '.join(floating)})"
+            networks.append(f"    {net_name}: {addr_str}")
+
+        sgs = [sg.get("name", "") for sg in (server.security_groups or [])]
+
+        lines = [
+            f"Instance ready: {name}",
+            f"  Identity:",
+            f"    UUID:              {server.id}",
+            f"    Name:              {server.name}",
+            f"    Created:           {getattr(server, 'created_at', None)}",
+            f"  Placement:",
+            f"    Hypervisor:        {getattr(server, 'hypervisor_hostname', None)}",
+            f"    Host ID:           {getattr(server, 'host_id', None)}",
+            f"    Availability zone: {getattr(server, 'availability_zone', None)}",
+            f"  Flavor:              {flavor.name}",
+            f"    vCPUs:             {flavor.vcpus}",
+            f"    RAM:               {flavor.ram} MB",
+            f"    Disk:              {flavor.disk} GB",
+            f"    Ephemeral:         {getattr(flavor, 'ephemeral', 0)} GB",
+            f"  Image:               {image.name}",
+            f"    ID:                {image.id}",
+            f"    Size:              {img_size_str}",
+            f"    Min disk:          {getattr(image, 'min_disk', None)} GB",
+            f"    Min RAM:           {getattr(image, 'min_ram', None)} MB",
+            f"  Networks:",
+            *networks,
+            f"  Security groups:     {', '.join(sgs)}",
+            f"  Power state:         {getattr(server, 'power_state', None)}",
+        ]
+        logger.info("\n".join(lines))
+
     def deploy(self, topology: NetworkTopology) -> str | None:
         mgmt_floating_ip: str | None = None
 
@@ -46,6 +88,7 @@ class HostDeployer:
             if not os_mgmt_net:
                 raise RuntimeError(f"OpenStack network '{self._n('management_network')}' not found.")
 
+            logger.info("Submitting: %s  image=%s  flavor=%s", self._n("management_host"), image.name, flavor.name)
             time.sleep(1)
             server = self._conn.compute.create_server(
                 name=self._n("management_host"),
@@ -63,7 +106,7 @@ class HostDeployer:
                 time.sleep(_POLL_INTERVAL)
                 current = self._conn.compute.get_server(server.id)
                 if current.status == "ACTIVE":
-                    logger.info("Active: %s", self._n("management_host"))
+                    self._log_instance_info(self._n("management_host"), current, flavor, image)
                     break
                 elif current.status == "ERROR":
                     raise RuntimeError(f"'{self._n('management_host')}' entered ERROR: {getattr(current, 'fault', 'unknown')}")
@@ -82,7 +125,7 @@ class HostDeployer:
         hosts = topology.get_all_hosts()
         for i in range(0, len(hosts), _BATCH_SIZE):
             batch = hosts[i:i + _BATCH_SIZE]
-            pending: dict[str, Host] = {}
+            pending: dict[str, tuple[Host, object, object]] = {}
 
             for host in batch:
                 base_image_name = self._online.get_base_image(host.vm_type)
@@ -105,6 +148,7 @@ class HostDeployer:
                 if host.ip_address:
                     network_spec["fixed_ip"] = str(host.ip_address)
 
+                logger.info("Submitting: %s  image=%s  flavor=%s", self._n(host.name), image.name, flavor.name)
                 time.sleep(1)
                 server = self._conn.compute.create_server(
                     name=self._n(host.name),
@@ -114,19 +158,18 @@ class HostDeployer:
                     security_groups=[{"name": self._n(subnet.sg_name)}],
                     key_name=self._ssh_key_name,
                 )
-                pending[server.id] = host
-                logger.info("Submitted: %s", self._n(host.name))
+                pending[server.id] = (host, flavor, image)
 
             deadline = time.monotonic() + _DEPLOY_TIMEOUT
             while pending:
                 if time.monotonic() > deadline:
-                    raise TimeoutError(f"Timed out waiting for: {[h.name for h in pending.values()]}")
+                    raise TimeoutError(f"Timed out waiting for: {[h.name for h, _, _ in pending.values()]}")
                 time.sleep(_POLL_INTERVAL)
                 done = []
-                for server_id, host in pending.items():
+                for server_id, (host, flavor, image) in pending.items():
                     current = self._conn.compute.get_server(server_id)
                     if current.status == "ACTIVE":
-                        logger.info("Active: %s", host.name)
+                        self._log_instance_info(self._n(host.name), current, flavor, image)
                         done.append(server_id)
                     elif current.status == "ERROR":
                         raise RuntimeError(f"Instance '{host.name}' entered ERROR: {getattr(current, 'fault', 'unknown')}")
