@@ -43,7 +43,7 @@ class DeploymentOrchestrator:
             logger.info("No management host; skipping Ansible for %s", topology.name)
             return
         logger.info("Configuring topology: %s", topology.name)
-        AnsibleRunner(self._config, self._online, self._playbook_registry).run(topology, mgmt_floating_ip)
+        AnsibleRunner(self._config, self._online, self._playbook_registry, self._conn, self._project_name).run(topology, mgmt_floating_ip)
         logger.info("Configuration complete: %s", topology.name)
 
     def deploy(self, topology: NetworkTopology) -> None:
