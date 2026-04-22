@@ -250,7 +250,7 @@
             {
               "name": "external_attacker",
               "vm_type": "kali_running",
-              "flavor": "m1.small",
+              "flavor": "m2.large",
               "ip_address": "10.0.0.10"
             }
           ]
