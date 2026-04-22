@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import ansible_runner
+from openstack.connection import Connection
 
 from config.config import Config
 from src.abstractions.network import NetworkTopology
@@ -15,6 +17,9 @@ from src.playbooks.playbook_registry_service import PlaybookRegistryService
 logger = logging.getLogger(__name__)
 
 _MHBENCH_DIR = Path(__file__).resolve().parent.parent.parent
+_CONSOLE_TAIL_LINES = 100
+_PLAYBOOK_RETRIES = 3
+_PLAYBOOK_RETRY_DELAY = 15
 
 
 class AnsibleRunner:
@@ -24,12 +29,31 @@ class AnsibleRunner:
         config: Config,
         online_registry: OnlineRegistryService,
         playbook_registry: PlaybookRegistryService,
+        conn: Connection | None = None,
+        project_name: str | None = None,
     ) -> None:
         self._ssh_key_path = config.openstack.ssh_key_path
         self._online = online_registry
         self._playbook_registry = playbook_registry
+        self._conn = conn
+        self._project_name = project_name
         c2c = getattr(config, "c2c", None)
         self._c2c_vars: dict = {"caldera_ip": c2c.ip, "caldera_port": c2c.port} if c2c else {}
+
+    def _log_console(self, host_name: str) -> None:
+        if not self._conn:
+            return
+        full_name = f"{self._project_name}-{host_name}" if self._project_name else host_name
+        server = self._conn.compute.find_server(full_name)
+        if not server:
+            logger.warning("Could not find server '%s' to fetch console log", full_name)
+            return
+        try:
+            output = self._conn.compute.get_server_console_output(server.id, length=_CONSOLE_TAIL_LINES)
+            console_text = output.get("output", "") if isinstance(output, dict) else str(output)
+            logger.info("Console log for %s (last %d lines):\n%s", full_name, _CONSOLE_TAIL_LINES, console_text)
+        except Exception:
+            logger.exception("Failed to fetch console log for '%s'", full_name)
 
     def _run_playbook(self, pb_name: str, inventory: dict, extravars: dict, tmp: str, project_dir: str) -> None:
         pb_path = self._playbook_registry.get_path(pb_name)
@@ -39,20 +63,29 @@ class AnsibleRunner:
                 print(line, end="", flush=True)
             return True
 
-        result = ansible_runner.run(
-            private_data_dir=tmp,
-            project_dir=project_dir,
-            playbook=pb_path.name,
-            inventory=inventory,
-            extravars=extravars,
-            event_handler=_stream,
-            quiet=True,
-        )
-        if result.status != "successful":
-            stderr = result.stderr.read() if result.stderr else ""
-            raise RuntimeError(
-                f"Playbook '{pb_name}' failed (status: {result.status}).\n{stderr}"
+        for attempt in range(1, _PLAYBOOK_RETRIES + 1):
+            result = ansible_runner.run(
+                private_data_dir=tmp,
+                project_dir=project_dir,
+                playbook=pb_path.name,
+                inventory=inventory,
+                extravars=extravars,
+                event_handler=_stream,
+                quiet=True,
             )
+            if result.status == "successful":
+                return
+            stderr = result.stderr.read() if result.stderr else ""
+            if attempt < _PLAYBOOK_RETRIES:
+                logger.warning(
+                    "Playbook '%s' failed (attempt %d/%d, status: %s) — retrying in %ds.\n%s",
+                    pb_name, attempt, _PLAYBOOK_RETRIES, result.status, _PLAYBOOK_RETRY_DELAY, stderr,
+                )
+                time.sleep(_PLAYBOOK_RETRY_DELAY)
+            else:
+                raise RuntimeError(
+                    f"Playbook '{pb_name}' failed after {_PLAYBOOK_RETRIES} attempts (status: {result.status}).\n{stderr}"
+                )
 
     def run(self, topology: NetworkTopology, mgmt_floating_ip: str) -> None:
         hosts = topology.get_all_hosts()
@@ -106,10 +139,15 @@ class AnsibleRunner:
                     logger.info("Running playbook '%s' on '%s'", pb_name, host_name)
                 else:
                     logger.info("Running topology playbook '%s'", pb_name)
-                self._run_playbook(
-                    pb_name,
-                    {"all": {"hosts": inventory_hosts}},
-                    extravars,
-                    tmp,
-                    project_dir,
-                )
+                try:
+                    self._run_playbook(
+                        pb_name,
+                        {"all": {"hosts": inventory_hosts}},
+                        extravars,
+                        tmp,
+                        project_dir,
+                    )
+                except RuntimeError:
+                    if host_name:
+                        self._log_console(host_name)
+                    raise
