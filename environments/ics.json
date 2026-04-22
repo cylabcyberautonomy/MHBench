@@ -75,7 +75,8 @@
             {
               "name": "manage_A_0",
               "vm_type": "ubuntu_netcat_running",
-              "flavor": "m1.small"
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.20"
             }
           ]
         },
@@ -149,7 +150,8 @@
             {
               "name": "manage_B_0",
               "vm_type": "ubuntu_netcat_running",
-              "flavor": "m1.small"
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.20"
             }
           ]
         },
