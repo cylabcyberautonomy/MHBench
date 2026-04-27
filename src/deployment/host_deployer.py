@@ -179,9 +179,13 @@ class HostDeployer:
         return mgmt_floating_ip
 
     def teardown(self, topology: NetworkTopology) -> None:
-        for fip in self._conn.network.ips(project_id=self._project_id):
-            self._conn.network.delete_ip(fip.id)
-            logger.info("Released floating IP: %s", fip.floating_ip_address)
+        if self._management:
+            mgmt_name = self._n("management_host")
+            for server in self._conn.compute.servers(name=mgmt_name, project_id=self._project_id):
+                for port in self._conn.network.ports(device_id=server.id):
+                    for fip in self._conn.network.ips(port_id=port.id):
+                        self._conn.network.delete_ip(fip.id)
+                        logger.info("Released floating IP: %s", fip.floating_ip_address)
 
         pending: dict[str, str] = {}
 
