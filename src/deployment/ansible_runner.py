@@ -72,6 +72,18 @@ class AnsibleRunner:
                 extravars=extravars,
                 event_handler=_stream,
                 quiet=True,
+                envvars={
+                    "ANSIBLE_SSH_ARGS": (
+                        "-o ControlMaster=no "
+                        "-o ControlPath=none "
+                        "-o StrictHostKeyChecking=no "
+                        "-o UserKnownHostsFile=/dev/null "
+                        "-o ServerAliveInterval=30 "
+                        "-o ServerAliveCountMax=10"
+                    ),
+                    "ANSIBLE_PIPELINING": "True",
+                    "ANSIBLE_SSH_RETRIES": "3",
+                }
             )
             if result.status == "successful":
                 return
@@ -105,7 +117,13 @@ class AnsibleRunner:
                 "ansible_user": "root",
                 "ansible_ssh_private_key_file": self._ssh_key_path,
                 "ansible_ssh_common_args": (
-                    f'-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null '
+                    f'-vvv '
+                    f'-o ControlMaster=no '
+                    f'-o ControlPath=none '
+                    f'-o StrictHostKeyChecking=no '
+                    f'-o UserKnownHostsFile=/dev/null '
+                    f'-o ServerAliveInterval=30 '
+                    f'-o ServerAliveCountMax=10 '
                     f'-o ProxyCommand="{proxy}"'
                 ),
             }
