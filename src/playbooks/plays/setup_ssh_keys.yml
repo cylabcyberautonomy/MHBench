@@ -67,3 +67,16 @@
       authorized_key:
         user: "{{ follower_user }}"
         key: "{{ hostvars[host]['public_key'] }}"
+
+- hosts: "{{ follower }}"
+  tasks:
+    - name: Print actual hostname and IP
+      command: hostname -I
+      register: actual_ip
+    - name: Show actual IP
+      debug:
+        msg: "Connected to IP: {{ actual_ip.stdout }}"
+    - name: Add public SSH key to authorized keys
+      authorized_key:
+        user: "{{ follower_user }}"
+        key: "{{ hostvars[host]['public_key'] }}"
