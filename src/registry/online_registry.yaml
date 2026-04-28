@@ -1,24 +1,32 @@
 - name: ubuntu_base_running
   parent: ubuntu_base
   playbooks:
+    - start_sysflow
+    - start_defender_services
   location: null
 
 - name: ubuntu_netcat_running
   parent: ubuntu_base
   playbooks:
   - netcat_shell
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: ubuntu_writeable_running
   parent: ubuntu_base
   playbooks:
   - writeable_passwd
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: ubuntu_sudobaron_running
   parent: ubuntu_base
   playbooks:
   - sudobaron
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: ubuntu_netcat_writeable_running
@@ -26,6 +34,8 @@
   playbooks:
   - netcat_shell
   - writeable_passwd
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: ubuntu_netcat_sudobaron_running
@@ -33,29 +43,39 @@
   playbooks:
   - netcat_shell
   - sudobaron
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: webserver_running
   parent: webserver
   playbooks:
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: webserver_netcat_running
   parent: webserver
   playbooks:
   - netcat_shell
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: webserver_writeable_running
   parent: webserver
   playbooks:
   - writeable_passwd
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: webserver_sudobaron_running
   parent: webserver
   playbooks:
   - sudobaron
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: webserver_netcat_writeable_running
@@ -63,6 +83,8 @@
   playbooks:
   - netcat_shell
   - writeable_passwd
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: webserver_netcat_sudobaron_running
@@ -70,6 +92,8 @@
   playbooks:
   - netcat_shell
   - sudobaron
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: kali_running
