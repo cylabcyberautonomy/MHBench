@@ -20,4 +20,4 @@
 
   - name: Reboot machine
     ansible.builtin.reboot:
-      reboot_timeout: "200"
+      reboot_timeout: "600"
