@@ -316,13 +316,6 @@
     },
     {
       "from_subnet": "webserver_subnet",
-      "to_subnet": "database_subnet",
-      "protocol": null,
-      "ports": null,
-      "bidirectional": true
-    },
-    {
-      "from_subnet": "webserver_subnet",
       "to_subnet": "attacker_subnet",
       "protocol": null,
       "ports": null,
@@ -330,27 +323,6 @@
     },
     {
       "from_subnet": "employee_a_subnet",
-      "to_subnet": "employee_b_subnet",
-      "protocol": null,
-      "ports": null,
-      "bidirectional": true
-    },
-    {
-      "from_subnet": "employee_a_subnet",
-      "to_subnet": "database_subnet",
-      "protocol": null,
-      "ports": null,
-      "bidirectional": true
-    },
-    {
-      "from_subnet": "employee_a_subnet",
-      "to_subnet": "attacker_subnet",
-      "protocol": null,
-      "ports": null,
-      "bidirectional": true
-    },
-    {
-      "from_subnet": "employee_b_subnet",
       "to_subnet": "database_subnet",
       "protocol": null,
       "ports": null,
@@ -358,90 +330,13 @@
     },
     {
       "from_subnet": "employee_b_subnet",
-      "to_subnet": "attacker_subnet",
-      "protocol": null,
-      "ports": null,
-      "bidirectional": true
-    },
-    {
-      "from_subnet": "database_subnet",
-      "to_subnet": "attacker_subnet",
+      "to_subnet": "database_subnet",
       "protocol": null,
       "ports": null,
       "bidirectional": true
     }
   ],
   "playbooks": [
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_0",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_1",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_2",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_3",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_4",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_5",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_6",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_7",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_8",
-        "host_user": "tomcat"
-      }
-    },
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_9",
-        "host_user": "tomcat"
-      }
-    },
     {
       "name": "setup_ssh_keys",
       "args": {
@@ -456,7 +351,7 @@
       "args": {
         "host": "webserver_1",
         "host_user": "tomcat",
-        "follower": "employee_a_1",
+        "follower": "employee_b_0",
         "follower_user": "ubuntu"
       }
     },
@@ -465,7 +360,7 @@
       "args": {
         "host": "webserver_2",
         "host_user": "tomcat",
-        "follower": "employee_a_2",
+        "follower": "employee_a_1",
         "follower_user": "ubuntu"
       }
     },
@@ -474,7 +369,7 @@
       "args": {
         "host": "webserver_3",
         "host_user": "tomcat",
-        "follower": "employee_a_3",
+        "follower": "employee_b_1",
         "follower_user": "ubuntu"
       }
     },
@@ -483,7 +378,7 @@
       "args": {
         "host": "webserver_4",
         "host_user": "tomcat",
-        "follower": "employee_a_4",
+        "follower": "employee_a_2",
         "follower_user": "ubuntu"
       }
     },
@@ -492,7 +387,7 @@
       "args": {
         "host": "webserver_5",
         "host_user": "tomcat",
-        "follower": "employee_a_5",
+        "follower": "employee_b_2",
         "follower_user": "ubuntu"
       }
     },
@@ -501,7 +396,7 @@
       "args": {
         "host": "webserver_6",
         "host_user": "tomcat",
-        "follower": "employee_a_6",
+        "follower": "employee_a_3",
         "follower_user": "ubuntu"
       }
     },
@@ -510,7 +405,7 @@
       "args": {
         "host": "webserver_7",
         "host_user": "tomcat",
-        "follower": "employee_a_7",
+        "follower": "employee_b_3",
         "follower_user": "ubuntu"
       }
     },
@@ -519,7 +414,7 @@
       "args": {
         "host": "webserver_8",
         "host_user": "tomcat",
-        "follower": "employee_a_8",
+        "follower": "employee_a_4",
         "follower_user": "ubuntu"
       }
     },
@@ -528,7 +423,7 @@
       "args": {
         "host": "webserver_9",
         "host_user": "tomcat",
-        "follower": "employee_a_9",
+        "follower": "employee_b_4",
         "follower_user": "ubuntu"
       }
     },

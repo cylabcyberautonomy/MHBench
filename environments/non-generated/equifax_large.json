@@ -355,23 +355,9 @@
       "protocol": null,
       "ports": null,
       "bidirectional": true
-    },
-    {
-      "from_subnet": "corporate_subnet",
-      "to_subnet": "attacker_subnet",
-      "protocol": null,
-      "ports": null,
-      "bidirectional": true
     }
   ],
   "playbooks": [
-    {
-      "name": "equifax_ssh_config",
-      "args": {
-        "host": "webserver_0",
-        "host_user": "tomcat"
-      }
-    },
     {
       "name": "setup_ssh_keys",
       "args": {
