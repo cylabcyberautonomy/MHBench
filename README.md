@@ -5,9 +5,10 @@ Multi-host cybersecurity benchmark environment system. MHBench builds VM images,
 ## Prerequisites
 
 - Python ≥ 3.12
-- An OpenStack cloud with credentials in `~/.config/openstack/clouds.yaml`
+- An OpenStack cloud with credentials in a `clouds.yaml` (default location `~/.config/openstack/clouds.yaml`)
 - An SSH keypair registered with the cloud (see `openstack.keypair_name` and `openstack.ssh_key_path` in `config/config.yaml`)
-- Ansible 10.4.0 (installed automatically as a dependency)
+
+Ansible and all Python dependencies are installed automatically by `uv sync`.
 
 ## Installation
 
@@ -17,15 +18,16 @@ Dependencies are managed with [uv](https://docs.astral.sh/uv/). If you don't alr
 pip install uv
 ```
 
-Then sync the environment:
+Clone the repo and sync the environment:
 
 ```bash
+git clone https://github.com/cylabcyberautonomy/MHBench.git v3_MHBench
 cd v3_MHBench
 uv sync
 source .venv/bin/activate
 ```
 
-This installs the `mhbench` console script (entry point `cli:cli`). You can also run the CLI directly with `python cli.py ...`.
+After this, the `mhbench` command is available inside the venv — every CLI example below uses it. If you'd rather not activate the venv, substitute `uv run mhbench` (or `python cli.py`) for `mhbench` in any command.
 
 ## Configuration
 
@@ -35,7 +37,7 @@ Copy the example config:
 cp config/example_config.yaml config/config.yaml
 ```
 
-At minimum, fill in the four `openstack.*` fields that have no sensible default:
+Fill in the four `openstack.*` fields:
 
 | Field | What to set it to |
 | --- | --- |
@@ -59,7 +61,7 @@ Every other section ships with working defaults — see the inline comments in [
 
 ## CLI
 
-All commands accept `--config PATH` (default `config/config.yaml`) and `-v/--verbose`.
+All commands accept `--config PATH` (default `config/config.yaml`) and `-v/--verbose`. Run `mhbench --help` or `mhbench <command> --help` to see every option.
 
 ### Compile images
 
@@ -77,6 +79,12 @@ mhbench compile --all --force                  # force rebuild
 mhbench deploy environments/non-generated/dumbbell.json \
     --project-name my-experiment \
     --c2c-url http://10.0.0.1:8888
+```
+
+Validate a spec without touching the cloud:
+
+```bash
+mhbench deploy environments/non-generated/dumbbell.json --validate-only
 ```
 
 Flags:
@@ -140,3 +148,14 @@ v3_MHBench/
     ├── registry/           # offline/online/playbook YAML registries
     └── abstractions/       # shared data models
 ```
+
+## Troubleshooting
+
+- **`Config file not found: config/config.yaml`** — copy `config/example_config.yaml` to `config/config.yaml` (see [Configuration](#configuration)).
+- **Authentication / endpoint errors from OpenStack** — confirm `openstack.cloud` matches an entry in your `clouds.yaml` and that you can run `openstack server list` against the same cloud.
+- **Teardown leaves resources behind** — `--project-name` must exactly match the value used at deploy time; resources are matched by that prefix.
+- **Ansible failures during `deploy` / `configure`** — re-run with `-v` for debug logs, and verify the management host's floating IP is reachable on TCP/22 from your workstation.
+
+## Support
+
+Please open an issue on the project's issue tracker for bug reports and feature requests. Include the command you ran, the relevant log output (with `-v`), and the topology spec when applicable.
