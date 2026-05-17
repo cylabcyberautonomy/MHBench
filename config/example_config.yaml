@@ -1,0 +1,33 @@
+compilation:
+  images_dir: src/compilation/images
+
+registry:
+  registry_dir: src/registry
+
+playbooks:
+  playbooks_dir: src/playbooks/plays
+
+# Per-topology management host (jumpbox) that all deployed VMs route through.
+# Defaults below work for most setups — only change if the CIDR collides with
+# your cloud or you need a different image/flavor for the jumpbox.
+management:
+  # CIDR for the management subnet
+  cidr: 10.0.1.0/24
+  # Static IP of the management host within that subnet
+  host_ip: 10.0.1.10
+  # Offline-registry image used for the management host
+  vm_type: ubuntu_base
+  # OpenStack flavor for the management host
+  flavor: m1.small
+
+openstack:
+  # Path to your OpenStack clouds.yaml file
+  clouds_yaml: ~/.config/openstack/clouds.yaml
+  # Which entry in clouds.yaml to use
+  cloud: openstack
+  # Name of the SSH keypair registered on the cloud
+  keypair_name: <your-keypair-name>
+  # Local path to the matching private key
+  ssh_key_path: ~/<your-key>.pem
+  # Login user for VMs (typically ubuntu)
+  ssh_user: ubuntu
