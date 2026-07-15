@@ -3,13 +3,18 @@
   playbooks: []
   disk_size_gb: null
   location: src/compilation/images/ubuntu24.qcow2
+- name: ubuntu20
+  parent: null
+  playbooks: []
+  disk_size_gb: null
+  location: src/compilation/images/ubuntu20.qcow2
 - name: Kali
   parent: null
   playbooks: []
   disk_size_gb: null
   location: src/compilation/images/kali.qcow2
 - name: ubuntu_root_ssh
-  parent: ubuntu24
+  parent: ubuntu20
   playbooks:
   - enable_root_ssh
   disk_size_gb: null
@@ -28,3 +33,11 @@
   - setup_struts
   disk_size_gb: null
   location: src/compilation/images/webserver.qcow2
+- name: sensor
+  parent: ubuntu_base
+  playbooks:
+  - install_zeek_nostart
+  - install_suricata_nostart
+  - install_filebeat_nostart
+  disk_size_gb: 16
+  location: src/compilation/images/sensor.qcow2
