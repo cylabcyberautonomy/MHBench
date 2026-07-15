@@ -1,0 +1,85 @@
+---
+- name: Install GHOSTS Lite (no start)
+  hosts: "{{ host }}"
+  remote_user: root
+
+  tasks:
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - unzip
+          - wget
+        state: present
+        update_cache: yes
+
+    - name: Create GHOSTS Lite directory
+      file:
+        path: /opt/ghosts
+        state: directory
+        mode: '0755'
+
+    - name: Download GHOSTS Lite latest release
+      shell: |
+        LATEST=$(curl -s https://api.github.com/repos/cmu-sei/GHOSTS/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')
+        wget -q "https://github.com/cmu-sei/GHOSTS/releases/download/${LATEST}/ghosts-lite.linux-x64.zip" \
+          -O /tmp/ghosts-lite.zip
+      args:
+        creates: /tmp/ghosts-lite.zip
+
+    - name: Extract GHOSTS Lite
+      unarchive:
+        src: /tmp/ghosts-lite.zip
+        dest: /opt/ghosts
+        remote_src: yes
+
+    - name: Make GHOSTS binary executable
+      file:
+        path: /opt/ghosts/ghosts
+        mode: '0755'
+      ignore_errors: yes
+
+    - name: Create GHOSTS config directory
+      file:
+        path: /opt/ghosts/config
+        state: directory
+        mode: '0755'
+
+    - name: Copy application config
+      ansible.builtin.copy:
+        src: "aux_files/ghosts_lite_application.json"
+        dest: "/opt/ghosts/config/application.json"
+
+    - name: Copy timeline config
+      ansible.builtin.copy:
+        src: "aux_files/ghosts_lite_timeline.json"
+        dest: "/opt/ghosts/config/timeline.json"
+
+    - name: Install GHOSTS Lite systemd service
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=GHOSTS Lite Network Activity Emulator
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/opt/ghosts
+          ExecStart=/opt/ghosts/ghosts
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/ghosts-lite.service
+        mode: '0644'
+
+    - name: Reload systemd
+      command: systemctl daemon-reload
+
+    - name: Ensure GHOSTS Lite does not start on boot
+      systemd:
+        name: ghosts-lite
+        enabled: no
+        state: stopped
+      ignore_errors: yes

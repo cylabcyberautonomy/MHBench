@@ -1,0 +1,101 @@
+---
+- name: Install Filebeat with Zeek and Suricata modules (no start)
+  hosts: "{{ host }}"
+  become: yes
+
+  vars:
+    es_address: "https://10.81.1.25:9200"
+    es_user: "elastic"
+    es_password: "-97z1wUJcnE_Y31SuYg-"
+
+  tasks:
+    - name: Add Elastic GPG key
+      shell: |
+        curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
+        gpg --dearmor -o /usr/share/keyrings/elastic-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/elastic-archive-keyring.gpg
+
+    - name: Add Elastic apt repository
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/elastic-archive-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | \
+        tee /etc/apt/sources.list.d/elastic-8.x.list
+      args:
+        creates: /etc/apt/sources.list.d/elastic-8.x.list
+
+    - name: Install Filebeat
+      apt:
+        name: filebeat
+        state: present
+        update_cache: yes
+
+    - name: Configure Filebeat output to Elasticsearch
+      copy:
+        dest: /etc/filebeat/filebeat.yml
+        mode: "0644"
+        content: |
+          filebeat.config.modules:
+            path: ${path.config}/modules.d/*.yml
+            reload.enabled: false
+
+          output.elasticsearch:
+            hosts: ["{{ es_address }}"]
+            username: "{{ es_user }}"
+            password: "{{ es_password }}"
+            ssl.verification_mode: none
+
+          setup.kibana:
+            host: ""
+
+          setup.ilm.enabled: false
+
+    - name: Enable Suricata module
+      command: filebeat modules enable suricata
+
+    - name: Configure Suricata module
+      copy:
+        dest: /etc/filebeat/modules.d/suricata.yml
+        mode: "0644"
+        content: |
+          - module: suricata
+            eve:
+              enabled: true
+              var.paths: ["/var/log/suricata/eve.json"]
+
+    - name: Enable Zeek module
+      command: filebeat modules enable zeek
+
+    - name: Configure Zeek module
+      copy:
+        dest: /etc/filebeat/modules.d/zeek.yml
+        mode: "0644"
+        content: |
+          - module: zeek
+            capture_loss:
+              enabled: true
+              var.paths: ["/opt/zeek/logs/current/capture_loss.log", "/usr/local/zeek/logs/current/capture_loss.log"]
+            connection:
+              enabled: true
+              var.paths: ["/opt/zeek/logs/current/conn.log", "/usr/local/zeek/logs/current/conn.log"]
+            dns:
+              enabled: true
+              var.paths: ["/opt/zeek/logs/current/dns.log", "/usr/local/zeek/logs/current/dns.log"]
+            http:
+              enabled: true
+              var.paths: ["/opt/zeek/logs/current/http.log", "/usr/local/zeek/logs/current/http.log"]
+            files:
+              enabled: true
+              var.paths: ["/opt/zeek/logs/current/files.log", "/usr/local/zeek/logs/current/files.log"]
+            notice:
+              enabled: true
+              var.paths: ["/opt/zeek/logs/current/notice.log", "/usr/local/zeek/logs/current/notice.log"]
+            weird:
+              enabled: true
+              var.paths: ["/opt/zeek/logs/current/weird.log", "/usr/local/zeek/logs/current/weird.log"]
+
+    - name: Ensure Filebeat does not start on boot
+      systemd:
+        name: filebeat
+        enabled: no
+        state: stopped
+      ignore_errors: yes

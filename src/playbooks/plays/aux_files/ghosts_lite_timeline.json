@@ -1,0 +1,48 @@
+{
+  "Status": "Run",
+  "TimeLineHandlers": [
+    {
+      "HandlerType": "Command",
+      "InitialSleepMinutes": 2,
+      "Loop": true,
+      "TimeLineEvents": [
+        {
+          "Command": "/bin/bash",
+          "CommandArgs": ["-c", "su - ubuntu -c 'curl -s -o /dev/null http://localhost:8080/ --max-time 5'"],
+          "DelayAfter": 60000,
+          "DelayBefore": 0
+        },
+        {
+          "Command": "/bin/bash",
+          "CommandArgs": ["-c", "su - ubuntu -c 'curl -s -o /dev/null https://www.apache.org/ --max-time 10'"],
+          "DelayAfter": 180000,
+          "DelayBefore": 0
+        },
+        {
+          "Command": "/bin/bash",
+          "CommandArgs": ["-c", "su - ubuntu -c 'tail -n 20 /opt/tomcat/logs/catalina.out > /dev/null 2>&1 || true'"],
+          "DelayAfter": 120000,
+          "DelayBefore": 0
+        },
+        {
+          "Command": "/bin/bash",
+          "CommandArgs": ["-c", "su - ubuntu -c 'df -h > /dev/null && free -m > /dev/null'"],
+          "DelayAfter": 300000,
+          "DelayBefore": 0
+        },
+        {
+          "Command": "/bin/bash",
+          "CommandArgs": ["-c", "su - ubuntu -c 'curl -s -o /dev/null https://mvnrepository.com/ --max-time 10'"],
+          "DelayAfter": 240000,
+          "DelayBefore": 0
+        },
+        {
+          "Command": "/bin/bash",
+          "CommandArgs": ["-c", "su - ubuntu -c 'ls -la ~/ > /dev/null'"],
+          "DelayAfter": 90000,
+          "DelayBefore": 0
+        }
+      ]
+    }
+  ]
+}

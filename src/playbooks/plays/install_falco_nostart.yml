@@ -8,9 +8,9 @@
     # ---- Editable vars -------------------------------------------------
     falco_version: ""               # blank = latest from repo
     falcosidekick_version: "2.31.1" # pin if you like; blank = latest
-    es_address: "https://elasticsearch.example.com:9200"  # Include protocol and port
+    es_address: "https://10.81.1.25:9200"
     es_user: "elastic"
-    es_password: "changeme"
+    es_password: "-97z1wUJcnE_Y31SuYg-"
     es_index: "falco"
     # -------------------------------------------------------------------
 

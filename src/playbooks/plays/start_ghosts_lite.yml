@@ -1,0 +1,12 @@
+---
+- name: Start GHOSTS Lite
+  hosts: "{{ host }}"
+  remote_user: root
+
+  tasks:
+    - name: Enable and start GHOSTS Lite
+      systemd:
+        name: ghosts-lite
+        state: started
+        enabled: yes
+        daemon_reload: yes

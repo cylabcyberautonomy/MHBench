@@ -1,0 +1,28 @@
+---
+- name: Install Suricata (no start)
+  hosts: "{{ host }}"
+  become: yes
+
+  tasks:
+    - name: Add Suricata stable PPA
+      shell: |
+        add-apt-repository -y ppa:oisf/suricata-stable
+      args:
+        creates: /etc/apt/sources.list.d/oisf-ubuntu-suricata-stable-*.list
+
+    - name: Install Suricata
+      apt:
+        name: suricata
+        state: present
+        update_cache: yes
+
+    - name: Update Suricata rules
+      command: suricata-update
+      ignore_errors: yes
+
+    - name: Ensure Suricata does not start on boot
+      systemd:
+        name: suricata
+        enabled: no
+        state: stopped
+      ignore_errors: yes
