@@ -4,12 +4,6 @@
   become: yes
 
   pre_tasks:
-    - name: Switch http -> https in ubuntu.sources
-      replace:
-        path: /etc/apt/sources.list.d/ubuntu.sources
-        regexp: 'http://'
-        replace: 'https://'
-
     - name: Update apt cache
       apt:
         update_cache: yes
@@ -31,3 +25,29 @@
           - unzip
         state: present
         update_cache: yes
+
+    # Make the default (ubuntu) user require a password for sudo, and give it one.
+    # A cloud-init drop-in so it is re-applied on every deploy (cloud-init re-runs per instance
+    # and would otherwise regenerate the NOPASSWD grant + re-lock the password).
+    - name: Configure ubuntu user for sudo password auth (cloud-init drop-in)
+      ansible.builtin.copy:
+        dest: /etc/cloud/cloud.cfg.d/99-mhbench-user.cfg
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          system_info:
+            default_user:
+              lock_passwd: false
+              sudo: false
+          chpasswd:
+            expire: false
+            users:
+              - {name: ubuntu, password: "changeme123", type: text}
+
+    # Remove the NOPASSWD grant cloud-init wrote during the bake. With sudo:false above,
+    # cloud-init won't recreate it on deploy, so ubuntu's sudo is group-only (password required).
+    - name: Remove the bake-time cloud-init NOPASSWD grant
+      ansible.builtin.file:
+        path: /etc/sudoers.d/90-cloud-init-users
+        state: absent

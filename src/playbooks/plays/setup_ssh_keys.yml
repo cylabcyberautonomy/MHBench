@@ -53,13 +53,13 @@
         insertafter: EOF
         dest: "~/.ssh/config"
         content: |
-          Host {{ follower_user }}
+          Host {{ follower }}_{{ follower_user }}
             HostName {{ hostvars[follower]['ansible_host'] }}
             User {{ follower_user }}
             IdentityFile ~/.ssh/id_ed25519
         create: true
         mode: "0600"
-        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ follower_user }}"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ follower }}_{{ follower_user }}"
 
 - hosts: "{{ follower }}"
   tasks:

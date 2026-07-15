@@ -122,7 +122,11 @@ class HostDeployer:
             mgmt_floating_ip = fip.floating_ip_address
             logger.info("Assigned floating IP %s to management_host", mgmt_floating_ip)
 
-        hosts = topology.get_all_hosts()
+        all_hosts = topology.get_all_hosts()
+        # Create larger-image hosts first — they take longest to boot, so kick them off earliest.
+        img_size = {vt: getattr(self._conn.image.find_image(self._online.get_base_image(vt)), "size", 0) or 0
+                    for vt in {h.vm_type for h in all_hosts}}
+        hosts = sorted(all_hosts, key=lambda h: img_size[h.vm_type], reverse=True)
         for i in range(0, len(hosts), _BATCH_SIZE):
             batch = hosts[i:i + _BATCH_SIZE]
             pending: dict[str, tuple[Host, object, object]] = {}

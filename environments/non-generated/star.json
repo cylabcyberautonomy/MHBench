@@ -277,7 +277,7 @@
       "name": "add_data",
       "args": {
         "host": "host_0",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_0.json"
       }
     },
@@ -285,7 +285,7 @@
       "name": "add_data",
       "args": {
         "host": "host_1",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_1.json"
       }
     },
@@ -293,7 +293,7 @@
       "name": "add_data",
       "args": {
         "host": "host_2",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_2.json"
       }
     },
@@ -301,7 +301,7 @@
       "name": "add_data",
       "args": {
         "host": "host_3",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_3.json"
       }
     },
@@ -309,7 +309,7 @@
       "name": "add_data",
       "args": {
         "host": "host_4",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_4.json"
       }
     },
@@ -317,7 +317,7 @@
       "name": "add_data",
       "args": {
         "host": "host_5",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_5.json"
       }
     },
@@ -325,7 +325,7 @@
       "name": "add_data",
       "args": {
         "host": "host_6",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_6.json"
       }
     },
@@ -333,7 +333,7 @@
       "name": "add_data",
       "args": {
         "host": "host_7",
-        "host_user": "ubuntu",
+        "host_user": "tomcat",
         "path": "~/data_host_7.json"
       }
     },
@@ -341,7 +341,7 @@
       "name": "add_data",
       "args": {
         "host": "host_8",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_8.json"
       }
     },
@@ -349,7 +349,7 @@
       "name": "add_data",
       "args": {
         "host": "host_9",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_9.json"
       }
     },
@@ -357,7 +357,7 @@
       "name": "add_data",
       "args": {
         "host": "host_10",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_10.json"
       }
     },
@@ -365,7 +365,7 @@
       "name": "add_data",
       "args": {
         "host": "host_11",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_11.json"
       }
     },
@@ -373,7 +373,7 @@
       "name": "add_data",
       "args": {
         "host": "host_12",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_12.json"
       }
     },
@@ -381,7 +381,7 @@
       "name": "add_data",
       "args": {
         "host": "host_13",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_13.json"
       }
     },
@@ -389,7 +389,7 @@
       "name": "add_data",
       "args": {
         "host": "host_14",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_14.json"
       }
     },
@@ -397,7 +397,7 @@
       "name": "add_data",
       "args": {
         "host": "host_15",
-        "host_user": "ubuntu",
+        "host_user": "root",
         "path": "~/data_host_15.json"
       }
     },
