@@ -1,0 +1,651 @@
+#      ___             ___ __      __
+#     /   | __  ______/ (_) /_____/ /
+#    / /| |/ / / / __  / / __/ __  /
+#   / ___ / /_/ / /_/ / / /_/ /_/ /
+#  /_/  |_\__,_/\__,_/_/\__/\__,_/
+#
+# Linux Audit Daemon - Best Practice Configuration
+# /etc/audit/audit.rules
+#
+# Maintained by Nextron Systems (https://www.nextron-systems.com)
+# Modified for DISSECT / MHBench attack-agent telemetry.
+#
+# DISSECT changes are marked  ## >>> ADDED  /  ## >>> CHANGED  /  ## >>> REMOVED.
+# Rationale for all of them, in one line: the stock ruleset is tuned for a
+# production estate where the actor is a human with a login session and volume
+# is the binding constraint. Here the actor is an agent that may arrive with no
+# login session at all (auid unset), the hosts are short-lived lab VMs, and a
+# missing record is a false research finding. So: auid filters come off,
+# failures are collected alongside successes, and the socket layer is completed.
+#
+# COLLECTION NOTE (not a rule): capture `auditctl -l` and `auditctl -s` per host
+# at run start and end. `-i` below makes failed rule loads silent, so without
+# the loaded-rule dump you cannot distinguish "the agent never did X" from
+# "the rule for X never loaded here". `-s` reports the lost-event count.
+#
+# UID_MIN convention
+#   Rules that target human-user activity use `auid>=1000 -F auid!=unset`.
+#   1000 is the default UID_MIN on Debian/Ubuntu and RHEL 7+ / Fedora.
+#   If your host uses a different UID_MIN (e.g. 500 on RHEL/CentOS 6),
+#   replace 1000 everywhere with `awk '/^UID_MIN/{print $2}' /etc/login.defs`.
+#   auditd rules do not support variables, so this substitution must be
+#   done at deploy time (Ansible/Jinja2, sed, envsubst, etc.).
+
+# Remove any existing rules
+-D
+
+# Buffer Size
+## Feel free to increase this if the machine panic's
+## >>> CHANGED: 8192 -> 32768. Removing auid filters and adding socket/exit
+## telemetry raises event rate; a full backlog silently drops records.
+-b 32768
+
+# Failure Mode
+## Possible values: 0 (silent), 1 (printk, print a failure message), 2 (panic, halt the system)
+-f 1
+
+# Ignore errors
+## Keep optional distro-specific paths from aborting the whole load.
+## For strict validation, test a copy of this file with this line removed.
+-i
+
+# Self Auditing ---------------------------------------------------------------
+
+## Audit the audit logs
+### Successful and unsuccessful attempts to read information from the audit records
+-w /var/log/audit/ -p wra -k auditlog
+-w /var/audit/ -p wra -k auditlog
+
+## Auditd configuration
+### Modifications to audit configuration that occur while the audit collection functions are operating
+-w /etc/audit/ -p wa -k auditconfig
+-w /etc/libaudit.conf -p wa -k auditconfig
+-w /etc/audisp/ -p wa -k audispconfig
+
+# Filters ---------------------------------------------------------------------
+
+### We put these early because audit is a first match wins system.
+
+## Ignore current working directory records
+## -a always,exclude -F msgtype=CWD
+
+## Cron jobs fill the logs with stuff we normally don't want (works with SELinux)
+## NOTE: subj_type= requires SELinux. On non-SELinux systems (Debian/Ubuntu)
+## these rules are silently ignored (due to -i above). Replace with UID-based
+## filters if not running SELinux.
+-a never,user -F subj_type=crond_t
+-a never,exit -F subj_type=crond_t
+
+## Optional, distro-specific chrony/ntp suppression (commented out by default):
+## Account names differ across distros (chrony vs _chrony on Ubuntu 24.04) so
+## uncomment and adjust uid= to your host's time-daemon account if needed.
+#-a never,exit -F arch=b64 -S adjtimex -F auid=unset -F uid=chrony -F subj_type=chronyd_t
+
+## >>> REMOVED: -a always,exclude -F msgtype=CRYPTO_KEY_USER
+## CRYPTO_KEY_USER is auditd's record of SSH public-key authentication. Excluding
+## it leaves auth.log as the only source for "which auth method did this login
+## use", with nothing to corroborate it. Lab hosts are not public-facing, so the
+## volume argument does not apply.
+
+## Open VM Tools
+-a never,exit -F arch=b64 -S all -F exe=/usr/bin/vmtoolsd
+-a never,exit -F arch=b32 -S all -F exe=/usr/bin/vmtoolsd
+
+## High Volume Event Filter (especially on Linux Workstations)
+-a never,exit -F arch=b32 -F dir=/dev/shm/ -F key=sharedmemaccess
+-a never,exit -F arch=b64 -F dir=/dev/shm/ -F key=sharedmemaccess
+
+-a never,exit -F arch=b32 -F dir=/var/lock/lvm/ -F key=locklvm
+-a never,exit -F arch=b64 -F dir=/var/lock/lvm/ -F key=locklvm
+
+## Filebeat
+### https://www.elastic.co/guide/en/beats/filebeat/current/directory-layout.html
+
+-a always,exit -F arch=b32 -F dir=/etc/filebeat/ -F perm=wa -F key=filebeat
+-a always,exit -F arch=b64 -F dir=/etc/filebeat/ -F perm=wa -F key=filebeat
+
+-a always,exit -F arch=b32 -F dir=/usr/share/filebeat/ -F perm=wa -F key=filebeat
+-a always,exit -F arch=b64 -F dir=/usr/share/filebeat/ -F perm=wa -F key=filebeat
+
+## More information on how to filter events
+### https://access.redhat.com/solutions/2482221
+
+# Rules -----------------------------------------------------------------------
+
+## Kernel parameters
+-w /etc/sysctl.conf -p wa -k sysctl
+-w /etc/sysctl.d -p wa -k sysctl
+
+## Kernel module loading and unloading
+## >>> CHANGED: dropped -F auid!=unset. A daemon-context agent loading a module
+## is exactly the case worth catching.
+-a always,exit -F arch=b64 -S finit_module -S init_module -S delete_module -k modules
+-a always,exit -F arch=b32 -S finit_module -S init_module -S delete_module -k modules
+
+## Modprobe configuration
+-w /etc/modprobe.conf -p wa -k modprobe
+-w /etc/modprobe.d -p wa -k modprobe
+-w /etc/modules-load.d/ -p wa -k modprobe
+
+## KExec usage (all actions)
+## NOTE: kexec_file_load is x86_64-only; i386/b32 kexec is deprecated
+## and omitted here to keep the ruleset portable across libaudit versions.
+-a always,exit -F arch=b64 -S kexec_file_load -k KEXEC
+
+## Special files
+-a always,exit -F arch=b64 -S mknod -S mknodat -k specialfiles
+-a always,exit -F arch=b32 -S mknod -S mknodat -k specialfiles
+
+## Mount operations
+## >>> CHANGED: dropped -F auid!=unset (same reason as modules).
+-a always,exit -F arch=b64 -S mount -S umount2 -S move_mount -S open_tree -S fsopen -S fsconfig -S fsmount -k mount
+-a always,exit -F arch=b32 -S mount -S umount2 -S move_mount -S open_tree -S fsopen -S fsconfig -S fsmount -k mount
+
+## Change swap
+## >>> CHANGED: dropped -F auid!=unset.
+-a always,exit -F arch=b64 -S swapon -S swapoff -k swap
+-a always,exit -F arch=b32 -S swapon -S swapoff -k swap
+
+## Time
+## Account names differ across distros (ntp/chrony/systemd-timesync) so no
+## uid!= filter is applied here. Add a distro-specific never,exit overlay
+## above if your time daemon generates excessive noise.
+##
+## NOTE for DISSECT: these records are load-bearing. Cross-host event ordering
+## in the merged frame is only as good as clock agreement between hosts, so a
+## settimeofday/clock_settime event invalidates ordering downstream of it.
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -S clock_settime -k time
+-a always,exit -F arch=b32 -S adjtimex -S settimeofday -S clock_settime -k time
+### Local time zone
+-w /etc/localtime -p wa -k localtime
+
+## Cron configuration & scheduled jobs
+-w /etc/cron.allow -p wa -k cron
+-w /etc/cron.deny -p wa -k cron
+-w /etc/cron.d/ -p wa -k cron
+-w /etc/cron.daily/ -p wa -k cron
+-w /etc/cron.hourly/ -p wa -k cron
+-w /etc/cron.monthly/ -p wa -k cron
+-w /etc/cron.weekly/ -p wa -k cron
+-w /etc/crontab -p wa -k cron
+-w /etc/anacrontab -p wa -k cron
+-w /etc/at.allow -p wa -k cron
+-w /etc/at.deny -p wa -k cron
+-w /var/spool/cron/ -p wa -k cron
+
+## User, group, password databases
+## >>> CHANGED: /etc/shadow and /etc/gshadow now -p rwa (was -p wa).
+## Reads of the hashes are the credential-access signal; write-only watches miss
+## them entirely. /etc/passwd deliberately stays -p wa: read-watching it fires on
+## every `ls -l` and every name lookup.
+-w /etc/group -p wa -k etcgroup
+-w /etc/passwd -p wa -k etcpasswd
+-w /etc/gshadow -p rwa -k etcgshadow
+-w /etc/shadow -p rwa -k etcshadow
+-w /etc/nsswitch.conf -p wa -k etcpasswd
+-w /etc/sssd/ -p wa -k etcpasswd
+-w /etc/openldap/ -p wa -k etcpasswd
+-w /etc/krb5.conf -p wa -k etcpasswd
+-w /etc/krb5.conf.d/ -p wa -k etcpasswd
+-w /etc/subuid -p wa -k etcpasswd
+-w /etc/subgid -p wa -k etcpasswd
+
+## PAM & security configuration
+-w /etc/pam.d/ -p wa -k pam
+-w /etc/security/ -p wa -k pam
+-w /etc/polkit-1/ -p wa -k pam
+
+## Sudoers file changes
+-w /etc/sudoers -p wa -k actions
+-w /etc/sudoers.d/ -p wa -k actions
+
+## Login configuration and information
+-w /etc/login.defs -p wa -k login
+-w /etc/securetty -p wa -k login
+-w /var/log/faillog -p wa -k login
+-w /var/log/lastlog -p wa -k login
+-w /var/log/tallylog -p wa -k login
+
+## Network Environment
+### Changes to hostname
+-a always,exit -F arch=b64 -S sethostname -S setdomainname -k network_modifications
+-a always,exit -F arch=b32 -S sethostname -S setdomainname -k network_modifications
+
+### Successful IPv4 Connections
+-a always,exit -F arch=b64 -S connect -F a2=16 -F success=1 -F key=network_connect_4
+-a always,exit -F arch=b32 -S connect -F a2=16 -F success=1 -F key=network_connect_4
+
+### Successful IPv6 Connections
+-a always,exit -F arch=b64 -S connect -F a2=28 -F success=1 -F key=network_connect_6
+-a always,exit -F arch=b32 -S connect -F a2=28 -F success=1 -F key=network_connect_6
+
+## >>> ADDED: failed connections.
+## The two rules above are success=1 only. A refused or timed-out connect is the
+## clearest evidence of attempted-but-failed lateral movement, which is the
+## research subject. No a2 filter here — a failing call may not reach the point
+## where addrlen is meaningful.
+-a always,exit -F arch=b64 -S connect -F success=0 -k network_connect_fail
+-a always,exit -F arch=b32 -S connect -F success=0 -k network_connect_fail
+
+## >>> ADDED: catch-all successful connect.
+## The a2=16 / a2=28 filters match on sockaddr length exactly; callers passing an
+## oversized buffer fall through both. This backstop runs after them, so normal
+## v4/v6 traffic keeps its original key and only the leftovers land here.
+-a always,exit -F arch=b64 -S connect -F success=1 -k network_connect_other
+-a always,exit -F arch=b32 -S connect -F success=1 -k network_connect_other
+
+### Changes to other files
+-w /etc/hosts -p wa -k network_modifications
+-w /etc/resolv.conf -p wa -k network_modifications
+-w /etc/hostname -p wa -k network_modifications
+-w /etc/sysconfig/ -p wa -k sysconfig
+-w /etc/network/ -p wa -k network
+-a always,exit -F dir=/etc/NetworkManager/ -F perm=wa -k network_modifications
+
+### Firewall configuration
+-w /etc/nftables.conf -p wa -k firewall
+-w /etc/iptables/ -p wa -k firewall
+
+### Changes to issue
+-w /etc/issue -p wa -k etcissue
+-w /etc/issue.net -p wa -k etcissue
+
+## Service defaults
+-w /etc/default/ -p wa -k svc_defaults
+
+## Filesystem table
+-w /etc/fstab -p wa -k fstab
+
+## udev rules
+-w /etc/udev/rules.d/ -p wa -k udev
+
+## System startup scripts
+-w /etc/inittab -p wa -k init
+-w /etc/init.d/ -p wa -k init
+-w /etc/init/ -p wa -k init
+-w /etc/rc.local -p wa -k init
+
+## System binary and boot path changes
+## NOTE: On modern distros /bin -> /usr/bin; bin_writes and usr_writes may
+## double-fire for the same path. Keep both for older layouts.
+-a always,exit -F arch=b32 -F dir=/bin -F perm=wa -k bin_writes
+-a always,exit -F arch=b64 -F dir=/bin -F perm=wa -k bin_writes
+-a always,exit -F arch=b32 -F dir=/usr -F perm=wa -k usr_writes
+-a always,exit -F arch=b64 -F dir=/usr -F perm=wa -k usr_writes
+-a always,exit -F arch=b32 -F dir=/boot -F perm=wa -k boot_writes
+-a always,exit -F arch=b64 -F dir=/boot -F perm=wa -k boot_writes
+
+## Library search paths
+-w /etc/ld.so.conf -p wa -k libpath
+-w /etc/ld.so.conf.d -p wa -k libpath
+
+## Systemwide library preloads (LD_PRELOAD)
+-w /etc/ld.so.preload -p wa -k systemwide_preloads
+
+## System-wide environment variables
+-w /etc/environment -p wa -k environment
+
+## Mail configuration
+-w /etc/aliases -p wa -k mail
+-w /etc/postfix/ -p wa -k mail
+-w /etc/exim4/ -p wa -k mail
+
+## SSH configuration
+-w /etc/ssh/ -p wa -k sshd
+-w /etc/dropbear/ -p wa -k sshd
+
+## root ssh key tampering
+## >>> CHANGED: -p wa -> -p rwa. Reading root's private key is the credential
+## theft; writing authorized_keys is only the persistence half.
+-w /root/.ssh -p rwa -k rootkey
+
+## >>> ADDED: per-user SSH key material.
+## `-w` takes no globs, so these must be emitted at deploy time, one per account
+## in the environment spec. Without them, the only home-directory key coverage is
+## the path-agnostic file_* rules, which see writes but never reads.
+#-w /home/<user>/.ssh -p rwa -k userkey
+
+# Systemd
+-w /etc/systemd/ -p wa -k systemd
+-w /usr/lib/systemd -p wa -k systemd
+-w /lib/systemd/ -p wa -k systemd
+-w /usr/local/lib/systemd/ -p wa -k systemd
+
+## Mandatory Access Controls (MAC) policy
+-w /etc/selinux/ -p wa -k mac_policy
+-w /etc/apparmor/ -p wa -k mac_policy
+-w /etc/apparmor.d/ -p wa -k mac_policy
+
+## Shell/profile configurations
+-w /etc/profile.d/ -p wa -k shell_profiles
+-w /etc/profile -p wa -k shell_profiles
+-w /etc/shells -p wa -k shell_profiles
+-w /etc/bashrc -p wa -k shell_profiles
+-w /etc/csh.cshrc -p wa -k shell_profiles
+-w /etc/csh.login -p wa -k shell_profiles
+-w /etc/fish/ -p wa -k shell_profiles
+-w /etc/zsh/ -p wa -k shell_profiles
+
+## Critical elements access failures
+## >>> CHANGED: dropped -F auid>=1000 -F auid!=unset from every line below.
+## The stock pair leaves a hole at auid=0: a direct root login is excluded by
+## auid>=1000, and excluded from the *_system rules by auid=unset. Removing the
+## filter closes it and makes one key cover all actors.
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/etc -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/etc -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/bin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/bin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/sbin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/sbin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/usr/bin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/usr/bin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/usr/sbin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/usr/sbin -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/var -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/var -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/home -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/home -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/srv -F success=0 -k unauthedfileaccess
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F dir=/srv -F success=0 -k unauthedfileaccess
+
+### Permission-denied opens outside the watched directories above.
+### Narrower than success=0 — EACCES/EPERM are the high-signal cases and this
+### avoids the file-not-found noise that dominates daemon activity.
+## >>> CHANGED: dropped -F auid=unset so this covers every actor, not just daemons.
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F exit=-EACCES -k unauthedfileaccess_denied
+-a always,exit -F arch=b64 -S open -S openat -S openat2 -S open_by_handle_at -F exit=-EPERM -k unauthedfileaccess_denied
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F exit=-EACCES -k unauthedfileaccess_denied
+-a always,exit -F arch=b32 -S open -S openat -S openat2 -S open_by_handle_at -F exit=-EPERM -k unauthedfileaccess_denied
+
+## Session initiation information
+-w /var/run/utmp -p wa -k session
+-w /var/log/btmp -p wa -k session
+-w /var/log/wtmp -p wa -k session
+
+## >>> REMOVED: the DAC modification block (perm_mod).
+## chmod/chown/xattr are now covered without an auid filter by file_perm in the
+## File Lifecycle section. Keeping both split one behaviour across two keys
+## depending on whether the actor had a login session.
+
+# Special Rules ---------------------------------------------------------------
+
+## Ptrace (injection, debugging, tracing)
+### Logs all ptrace calls; Sigma differentiates by a0 value
+### (0x4=PTRACE_POKETEXT, 0x5=PTRACE_POKEDATA, 0x6=PTRACE_POKEUSR, etc.)
+-a always,exit -F arch=b64 -S ptrace -k tracing
+-a always,exit -F arch=b32 -S ptrace -k tracing
+
+## Anonymous File Creation
+### "memfd_create" creates anonymous file and returns a file descriptor to access it
+### When combined with "fexecve" can be used to stealthily run binaries in memory without touching disk
+-a always,exit -F arch=b64 -S memfd_create -F key=anon_file_create
+-a always,exit -F arch=b32 -S memfd_create -F key=anon_file_create
+
+## >>> REMOVED: T1070_006_timestomp (auid>=1000 only, no fallback).
+## Replaced by file_timestomp in the File Lifecycle section, which has no auid
+## filter. As written, root/daemon timestomping produced no record at all.
+
+## >>> ADDED: privilege transitions.
+## Nothing in the stock ruleset records a uid/gid/capability change directly.
+## Escalation could only be inferred by comparing uid fields across records, and
+## a setuid that is *attempted and fails* left no trace at all.
+-a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -S setfsuid -k priv_change
+-a always,exit -F arch=b32 -S setuid -S setreuid -S setresuid -S setfsuid -k priv_change
+-a always,exit -F arch=b64 -S setgid -S setregid -S setresgid -S setfsgid -k priv_change
+-a always,exit -F arch=b32 -S setgid -S setregid -S setresgid -S setfsgid -k priv_change
+-a always,exit -F arch=b64 -S capset -k priv_change
+-a always,exit -F arch=b32 -S capset -k priv_change
+
+## >>> ADDED: process termination.
+## auditd's `exit=` field is the syscall return value, not the process exit
+## status. Without exit_group there is no process end time, so process duration,
+## exit codes, long-running-process detection, and every paired-event duration
+## are uncomputable. Volume tracks execve roughly 1:1.
+-a always,exit -F arch=b64 -S exit_group -k process_exit
+-a always,exit -F arch=b32 -S exit_group -k process_exit
+
+## >>> ADDED: signals. Process termination by the agent, and signal-based evasion.
+-a always,exit -F arch=b64 -S kill -S tkill -S tgkill -k signal
+-a always,exit -F arch=b32 -S kill -S tkill -S tgkill -k signal
+
+## eBPF program loading
+-a always,exit -F arch=b64 -S bpf -k bpf
+-a always,exit -F arch=b32 -S bpf -k bpf
+
+## Namespace manipulation
+-a always,exit -F arch=b64 -S unshare -S setns -S pivot_root -k namespaces
+-a always,exit -F arch=b32 -S unshare -S setns -S pivot_root -k namespaces
+
+## Cross-process memory access
+-a always,exit -F arch=b64 -S process_vm_readv -S process_vm_writev -k process_vm
+-a always,exit -F arch=b32 -S process_vm_readv -S process_vm_writev -k process_vm
+
+## io_uring (known audit blind spot — operations bypass syscall auditing)
+-a always,exit -F arch=b64 -S io_uring_setup -k io_uring
+-a always,exit -F arch=b32 -S io_uring_setup -k io_uring
+
+## Exploitation primitives
+-a always,exit -F arch=b64 -S userfaultfd -k userfaultfd
+-a always,exit -F arch=b32 -S userfaultfd -k userfaultfd
+
+## System reboot/shutdown
+-a always,exit -F arch=b64 -S reboot -k reboot
+-a always,exit -F arch=b32 -S reboot -k reboot
+
+## Process accounting control
+-a always,exit -F arch=b64 -S acct -k process_accounting
+-a always,exit -F arch=b32 -S acct -k process_accounting
+
+## Kernel crypto sockets (AF_ALG)
+### Low-noise on most hosts. AF_ALG usage typically requires socket creation,
+### SOL_ALG configuration, and bind() with a SOCKADDR record that downstream
+### tooling can decode to recover salg_type / salg_name. Audit cannot match
+### those strings in-kernel, so keep the collection generic here.
+### NOTE: these must stay ABOVE the generic bind rule below, or the generic rule
+### claims them first and the af_alg key is never assigned.
+## >>> CHANGED: dropped -F auid>=1000 -F auid!=unset.
+-a always,exit -F arch=b64 -S socket -F a0=38 -F success=1 -k af_alg
+-a always,exit -F arch=b32 -S socket -F a0=38 -F success=1 -k af_alg
+-a always,exit -F arch=b64 -S bind -F a2=88 -F success=1 -k af_alg
+-a always,exit -F arch=b32 -S bind -F a2=88 -F success=1 -k af_alg
+-a always,exit -F arch=b64 -S setsockopt -F a1=279 -F success=1 -k af_alg
+-a always,exit -F arch=b32 -S setsockopt -F a1=279 -F success=1 -k af_alg
+
+## Privilege Abuse
+### The purpose of this rule is to detect when an admin may be abusing power by looking in user's home dir.
+-a always,exit -F dir=/home -F uid=0 -F auid>=1000 -F auid!=unset -C auid!=obj_uid -k power_abuse
+
+## Raw sockets
+### Logs all raw sockets
+-a always,exit -F arch=b32 -S socket -F a0=17 -F a1=3 -k raw_network_socket_created
+-a always,exit -F arch=b64 -S socket -F a0=17 -F a1=3 -k raw_network_socket_created
+### Keep watch for when BPF filters are attached
+-a always,exit -F arch=b32 -S setsockopt -F a1=1 -F a2=26 -k socket_bpf_filter_attached
+-a always,exit -F arch=b64 -S setsockopt -F a1=1 -F a2=26 -k socket_bpf_filter_attached
+
+# Socket Creations
+# will catch both IPv4 and IPv6
+
+-a always,exit -F arch=b32 -S socket -F a0=2  -k network_socket_created
+-a always,exit -F arch=b64 -S socket -F a0=2  -k network_socket_created
+
+-a always,exit -F arch=b32 -S socket -F a0=10 -k network_socket_created
+-a always,exit -F arch=b64 -S socket -F a0=10 -k network_socket_created
+
+# >>> ADDED: the inbound half of the socket layer.
+# The stock ruleset records socket() and connect() only, so every question about
+# listeners and accepted connections had no data at all: listening ports, reverse
+# shell listeners, inbound connections, and the receiving side of the host-to-host
+# connection matrix. Placed after af_alg so that rule keeps its specific key.
+# The destination in these records is the `saddr` hex blob — decode downstream.
+-a always,exit -F arch=b64 -S bind -k socket_bind
+-a always,exit -F arch=b32 -S bind -k socket_bind
+-a always,exit -F arch=b64 -S listen -k socket_listen
+-a always,exit -F arch=b32 -S listen -k socket_listen
+-a always,exit -F arch=b64 -S accept -S accept4 -k socket_accept
+-a always,exit -F arch=b32 -S accept -S accept4 -k socket_accept
+
+## Optional overlay: enable only if splice/vmsplice are rare in your estate.
+## Correlate short bursts of these events with recent af_alg activity from the
+## same pid/auid when investigating unusual kernel crypto socket usage.
+#-a always,exit -F arch=b64 -S splice -S vmsplice -F success=1 -F auid>=1000 -F auid!=unset -k splice_user
+#-a always,exit -F arch=b32 -S splice -S vmsplice -F success=1 -F auid>=1000 -F auid!=unset -k splice_user
+
+# Software Management ---------------------------------------------------------
+
+## Package manager configuration
+-w /etc/apt/ -p wa -k software_mgmt
+-w /etc/dnf/ -p wa -k software_mgmt
+-w /etc/yum.repos.d/ -p wa -k software_mgmt
+
+## Container configuration
+-w /var/lib/docker -p wa -k docker
+-w /etc/docker -p wa -k docker
+-w /etc/containers/ -p wa -k containers
+
+# CrowdStrike Falcon
+-a always,exit -F arch=b32 -F dir=/etc/crowdstrike/ -F perm=wa -F key=falcon_sensor
+-a always,exit -F arch=b64 -F dir=/etc/crowdstrike/ -F perm=wa -F key=falcon_sensor
+
+-a always,exit -F arch=b32 -F dir=/usr/lib/crowdstrike/ -F perm=wa -F key=falcon_sensor
+-a always,exit -F arch=b64 -F dir=/usr/lib/crowdstrike/ -F perm=wa -F key=falcon_sensor
+
+-a always,exit -F arch=b32 -F dir=/opt/CrowdStrike/ -F perm=wa -F key=falcon_sensor
+-a always,exit -F arch=b64 -F dir=/opt/CrowdStrike/ -F perm=wa -F key=falcon_sensor
+
+-a always,exit -F arch=b32 -F dir=/var/log/crowdstrike/ -F perm=wa -F key=falcon_sensor
+-a always,exit -F arch=b64 -F dir=/var/log/crowdstrike/ -F perm=wa -F key=falcon_sensor
+
+-a always,exit -F arch=b32 -S connect -F exe=/opt/CrowdStrike/falcon-sensor -F key=crowdstrike_network
+-a always,exit -F arch=b64 -S connect -F exe=/opt/CrowdStrike/falcon-sensor -F key=crowdstrike_network
+
+# ipc system call
+# /usr/include/linux/ipc.h
+
+## NOTE: glibc's semop() is implemented via semtimedop() on modern systems;
+## the standalone semop name was dropped from some libaudit tables.
+-a always,exit -F arch=b64 -S msgctl -S msgget -S semctl -S semget -S shmctl -S shmget -k Inter-Process_Communication
+-a always,exit -F arch=b32 -S msgctl -S msgget -S semctl -S semget -S shmctl -S shmget -k Inter-Process_Communication
+
+# High Volume Events ----------------------------------------------------------
+
+## Disable these rules if they create too many events in your environment
+
+## Process creation
+### Collect generic execution telemetry and derive tool- and context-specific
+### detections in downstream tooling such as Sigma / SIEM content.
+-a always,exit -F arch=b32 -S execve -S execveat -k process_creation
+-a always,exit -F arch=b64 -S execve -S execveat -k process_creation
+
+## >>> REMOVED: the auid-filtered `delete` rule.
+## rmdir/unlink/unlinkat/rename/renameat/renameat2 are covered without an auid
+## filter, and for both outcomes, by file_delete and file_move below.
+
+## File Access
+### Unauthorized Access (unsuccessful)
+## >>> CHANGED: dropped -F auid>=1000 -F auid!=unset.
+-a always,exit -F arch=b64 -S creat -S open -S openat -S openat2 -S open_by_handle_at -S truncate -S ftruncate -F exit=-EACCES -k file_access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S openat2 -S open_by_handle_at -S truncate -S ftruncate -F exit=-EPERM -k file_access
+-a always,exit -F arch=b32 -S creat -S open -S openat -S openat2 -S open_by_handle_at -S truncate -S ftruncate -F exit=-EACCES -k file_access
+-a always,exit -F arch=b32 -S creat -S open -S openat -S openat2 -S open_by_handle_at -S truncate -S ftruncate -F exit=-EPERM -k file_access
+
+### Unsuccessful Creation
+-a always,exit -F arch=b64 -S mkdir -S mkdirat -S creat -S link -S linkat -S symlink -S symlinkat -S mknod -S mknodat -F exit=-EACCES -k file_creation
+-a always,exit -F arch=b64 -S mkdir -S mkdirat -S creat -S link -S linkat -S symlink -S symlinkat -S mknod -S mknodat -F exit=-EPERM -k file_creation
+-a always,exit -F arch=b32 -S mkdir -S mkdirat -S creat -S link -S linkat -S symlink -S symlinkat -S mknod -S mknodat -F exit=-EACCES -k file_creation
+-a always,exit -F arch=b32 -S mkdir -S mkdirat -S creat -S link -S linkat -S symlink -S symlinkat -S mknod -S mknodat -F exit=-EPERM -k file_creation
+
+### Unsuccessful Modification
+-a always,exit -F arch=b64 -S rename -S renameat -S renameat2 -S truncate -S chmod -S setxattr -S lsetxattr -S removexattr -S lremovexattr -F exit=-EACCES -k file_modification
+-a always,exit -F arch=b64 -S rename -S renameat -S renameat2 -S truncate -S chmod -S setxattr -S lsetxattr -S removexattr -S lremovexattr -F exit=-EPERM -k file_modification
+-a always,exit -F arch=b32 -S rename -S renameat -S renameat2 -S truncate -S chmod -S setxattr -S lsetxattr -S removexattr -S lremovexattr -F exit=-EACCES -k file_modification
+-a always,exit -F arch=b32 -S rename -S renameat -S renameat2 -S truncate -S chmod -S setxattr -S lsetxattr -S removexattr -S lremovexattr -F exit=-EPERM -k file_modification
+
+# File Lifecycle (MHBench) ----------------------------------------------------
+## Path-agnostic capture of every file operation, one key per behavior for
+## downstream (dissect) classification. No auid filter, so service/root/daemon
+## activity (auid unset or 0) is captured — unlike the stock human-only file
+## rules, which miss the attacker. High-churn pseudo/tmpfs dirs are excluded
+## first (auditd is first-match-wins).
+##
+## >>> CHANGED: success=1 dropped from delete / move / perm / truncate / create.
+## These are low-volume syscalls, and a *failed* attempt is a first-class finding
+## for failure-mode analysis. Success and failure now share one key; split them
+## downstream on the `success` field. file_open_write keeps success=1 — failed
+## writable opens are high-volume probing noise and are already covered by the
+## EACCES/EPERM rules above.
+
+## Noise excludes (must precede the catch-all rules below)
+-a never,exit -F dir=/proc
+-a never,exit -F dir=/sys
+-a never,exit -F dir=/dev
+-a never,exit -F dir=/run
+-a never,exit -F dir=/var/log/audit
+
+## CREATE — a new filesystem object appears
+-a always,exit -F arch=b64 -S creat -S mknod -S mknodat -S mkdir -S mkdirat -S link -S linkat -S symlink -S symlinkat -k file_create
+-a always,exit -F arch=b32 -S creat -S mknod -S mknodat -S mkdir -S mkdirat -S link -S linkat -S symlink -S symlinkat -k file_create
+
+## CREATE-or-EDIT via open() — file opened writable (O_WRONLY|O_RDWR = 0x3).
+## Covers new-file creation AND edits of existing files; dissect reads the
+## recorded O_CREAT (0x40) bit to split the two. open() flags=a1, openat()
+## flags=a2. openat2 is a bitmask blind spot (flags in a struct) — see below.
+-a always,exit -F arch=b64 -S open   -F a1&0x3 -F success=1 -k file_open_write
+-a always,exit -F arch=b64 -S openat -F a2&0x3 -F success=1 -k file_open_write
+-a always,exit -F arch=b32 -S open   -F a1&0x3 -F success=1 -k file_open_write
+-a always,exit -F arch=b32 -S openat -F a2&0x3 -F success=1 -k file_open_write
+
+## >>> ADDED (commented): openat2 blind spot.
+## Flags live in a struct, so the writable-only filter above cannot be applied —
+## this would capture every openat2 regardless of mode. Enable temporarily to
+## measure how much traffic is bypassing file_open_write on your images, then
+## decide whether to keep it. Systemd and newer glibc paths use it.
+#-a always,exit -F arch=b64 -S openat2 -F success=1 -k file_openat2
+#-a always,exit -F arch=b32 -S openat2 -F success=1 -k file_openat2
+
+## TRUNCATE — content-destroying resize/zero of an existing file
+-a always,exit -F arch=b64 -S truncate -S ftruncate -k file_truncate
+-a always,exit -F arch=b32 -S truncate -S ftruncate -k file_truncate
+
+## DELETE — remove a file or directory
+-a always,exit -F arch=b64 -S unlink -S unlinkat -S rmdir -k file_delete
+-a always,exit -F arch=b32 -S unlink -S unlinkat -S rmdir -k file_delete
+
+## MOVE — rename / relocate (exfil staging, overwrite-in-place)
+## NOTE: emits four PATH records — items 0,1 are the parent dirs, 2 is the
+## source, 3 is the destination. "highest item" is NOT the rule here.
+-a always,exit -F arch=b64 -S rename -S renameat -S renameat2 -k file_move
+-a always,exit -F arch=b32 -S rename -S renameat -S renameat2 -k file_move
+
+## PERM / OWNER — mode, ownership, and xattr changes
+-a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -k file_perm
+-a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -k file_perm
+-a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -k file_perm
+-a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -k file_perm
+-a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k file_perm
+-a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -k file_perm
+
+## >>> ADDED: TIMESTOMP — replaces the removed auid-filtered rule.
+-a always,exit -F arch=b64 -S utimensat -S utimes -S futimesat -k file_timestomp
+-a always,exit -F arch=b32 -S utimensat -S utimes -S futimesat -k file_timestomp
+
+## WRITE CONTENTS — the literal data write. NOT ENABLED: write() fires per-buffer
+## (sockets/ttys/logs included); global volume overflows the audit backlog and
+## drops events. file_open_write above is the practical proxy. Enable only with
+## a tuned -b / backlog_limit:
+#-a always,exit -F arch=b64 -S write -S pwrite64 -S writev -S pwritev -F success=1 -k file_write
+#-a always,exit -F arch=b32 -S write -S pwrite64 -S writev -S pwritev -F success=1 -k file_write
+
+# 32-bit ABI Catch-All --------------------------------------------------------
+## >>> MOVED to the end of the file (was in High Volume Events).
+## As a first-match-wins `-S all` rule it claimed every b32 syscall, which made
+## every `-F arch=b32` rule below it dead — including the entire b32 File
+## Lifecycle section. Harmless on your uniformly 64-bit hosts, but it would have
+## silently voided half the ruleset on a mixed image.
+### https://github.com/linux-audit/audit-userspace/blob/c014eec64b3a16c004f4a75e5792a4ac2fcc0df2/rules/21-no32bit.rules
+-a always,exit -F arch=b32 -S all -k 32bit_abi
+
+# Make The Configuration Immutable --------------------------------------------
+## Left disabled: -e 2 blocks rule changes until reboot, which prevents
+## per-experiment reconfiguration. Modifications to /etc/audit/ are watched above.
+##-e 2

@@ -1,0 +1,31 @@
+---
+# Pre-attack (post-configure) reset: wipe each host's ground-truth logs at the deploy->attack
+# boundary so post-experiment collection yields ONLY attack-phase activity — no image-bake, boot,
+# or Ansible-configure noise. The harness blocks the attacker on this completing. Runs over the same
+# bastion ProxyJump inventory as collect_host_logs. ignore_unreachable: one dead host must not sink
+# the rest — it just falls back to needing a timestamp trim at analysis time.
+- hosts: all
+  remote_user: root
+  gather_facts: false
+  ignore_unreachable: true
+  tasks:
+    - name: Truncate live rsyslog logs, drop rotated/baked copies, reopen handles
+      ansible.builtin.shell: |
+        truncate -s 0 /var/log/auth.log /var/log/syslog 2>/dev/null || true
+        rm -f /var/log/auth.log.* /var/log/syslog.* 2>/dev/null || true
+        pkill -HUP -x rsyslogd || true
+      args:
+        executable: /bin/bash
+
+    - name: Rotate auditd (SIGUSR1) and drop the rotated-out pre-attack log
+      ansible.builtin.shell: |
+        pkill -USR1 -x auditd || true
+        sleep 2
+        find /var/log/audit -maxdepth 1 -name 'audit.log.*' -delete 2>/dev/null || true
+      args:
+        executable: /bin/bash
+
+    - name: Truncate cmdlog files
+      ansible.builtin.command: >-
+        find /var/log/cmdlog -maxdepth 1 -name '*.log' -exec truncate -s 0 {} +
+      failed_when: false

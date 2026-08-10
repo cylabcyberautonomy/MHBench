@@ -1,0 +1,15 @@
+---
+# Start logging services on an already-running host. The shared enable_host_logging play only
+# *enables* auditd/rsyslog for the next boot — correct for baked images, which reboot on deploy. The
+# attacker (kali) host is configured live with no reboot afterward, so start them explicitly here.
+- hosts: "{{ host }}"
+  become: true
+
+  tasks:
+    - name: Start logging services now
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+      loop:
+        - auditd
+        - rsyslog

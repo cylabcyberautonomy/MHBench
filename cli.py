@@ -269,5 +269,76 @@ def teardown(ctx: click.Context, spec: Path, yes: bool, project_name: str | None
     click.echo("Teardown complete.")
 
 
+# ---------------------------------------------------------------------------
+# collect
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.argument("spec", type=click.Path(exists=True, path_type=Path))
+@click.option("--mgmt-ip", default=None, required=True, help="Management host floating IP (from provisioning)")
+@click.option("--project-name", default=None, help="Prefix used during provisioning")
+@click.option("--dest", type=click.Path(path_type=Path), required=True,
+              help="Directory to fetch host logs into (files land at <dest>/<host>/<path>)")
+@click.pass_context
+def collect(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str | None, dest: Path) -> None:
+    """Fetch each host's ground-truth logs before teardown.
+
+    SPEC is the same environment JSON used to provision. Pulls auth.log/syslog/auditd/netflow/
+    cmdlog + per-user bash history from every host to <dest>/<host>/ over the bastion ProxyJump.
+    """
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
+    online = OnlineRegistryService(config)
+    parser = JsonSpecParser()
+
+    click.echo(f"Parsing spec: {spec}")
+    topology = parser.parse(spec)
+
+    if config.openstack is None:
+        raise click.ClickException("openstack config block is required for collection.")
+
+    playbook_registry = PlaybookRegistryService(config)
+    conn = build_connection(config.openstack)
+    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+
+    click.echo(f"Collecting host logs for '{topology.name}' -> {dest}...")
+    orchestrator.collect(topology, mgmt_ip, str(dest))
+    click.echo("Collection complete.")
+
+
+# ---------------------------------------------------------------------------
+# rotate-logs
+# ---------------------------------------------------------------------------
+
+@cli.command(name="rotate-logs")
+@click.argument("spec", type=click.Path(exists=True, path_type=Path))
+@click.option("--mgmt-ip", default=None, required=True, help="Management host floating IP (from provisioning)")
+@click.option("--project-name", default=None, help="Prefix used during provisioning")
+@click.pass_context
+def rotate_logs(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str | None) -> None:
+    """Reset each host's ground-truth logs at the deploy->attack boundary.
+
+    SPEC is the same environment JSON used to provision. Truncates/rotates auth.log/syslog/auditd/
+    cmdlog on every host over the bastion ProxyJump so post-experiment collection yields only
+    attack-phase activity. The harness blocks the attacker on this completing.
+    """
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
+    online = OnlineRegistryService(config)
+    parser = JsonSpecParser()
+
+    click.echo(f"Parsing spec: {spec}")
+    topology = parser.parse(spec)
+
+    if config.openstack is None:
+        raise click.ClickException("openstack config block is required for log rotation.")
+
+    playbook_registry = PlaybookRegistryService(config)
+    conn = build_connection(config.openstack)
+    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+
+    click.echo(f"Rotating host logs for '{topology.name}'...")
+    orchestrator.rotate_logs(topology, mgmt_ip)
+    click.echo("Rotation complete.")
+
+
 if __name__ == "__main__":
     cli()

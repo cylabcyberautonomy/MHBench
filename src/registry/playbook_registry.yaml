@@ -10,6 +10,10 @@ install_falco_nostart: src/playbooks/plays/install_falco_nostart.yml
 install_falco: src/playbooks/plays/install_falco.yml
 install_sysflow_nostart: src/playbooks/plays/install_sysflow_nostart.yml
 install_sysflow: src/playbooks/plays/install_sysflow.yml
+enable_host_logging: src/playbooks/plays/enable_host_logging.yml
+start_host_logging: src/playbooks/plays/start_host_logging.yml
+collect_host_logs: src/playbooks/plays/collect_host_logs.yml
+rotate_host_logs: src/playbooks/plays/rotate_host_logs.yml
 start_sysflow: src/playbooks/plays/start_sysflow.yml
 deploy_honey_service: src/playbooks/plays/deploy_honey_service.yml
 deploy_honey_ssh: src/playbooks/plays/deploy_honey_ssh.yml

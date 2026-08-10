@@ -1,0 +1,103 @@
+---
+# Bake-time play (added to ubuntu_base): turn on native host logging for ground-truth capture.
+# Baked into ubuntu_base so webserver + sensor inherit it; every deployed non-Kali host boots
+# with auth.log/syslog/auditd on, and every user's bash history is timestamped,
+# continuously flushed, and annotated with per-command exit codes. Services are only *enabled*
+# here (not started) — they start on each real deploy boot, not during the bake.
+- hosts: "{{ host }}"
+  remote_user: root
+  become: yes
+  tasks:
+    # ubuntu_base bakes this at COMPILE time (apt from reliable ubuntu repos). Kali runs it LIVE at
+    # deploy and can't be baked (its OpenStack datasource ignores the local compiler's NoCloud seed);
+    # it installs auditd via apt from kali.download, reachable now that the range has internet egress.
+    # Both paths first mask apt-daily/unattended-upgrades so they can't grab the dpkg lock mid-run.
+    - name: Disable automatic apt jobs (they hold the dpkg lock and race our install)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+        masked: true
+      loop:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+        - unattended-upgrades.service
+      failed_when: false
+
+    - name: Install logging packages via apt (auditd + rsyslog)
+      ansible.builtin.shell: |
+        set -e
+        apt-get update -o DPkg::Lock::Timeout=600 -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=600 auditd rsyslog
+      changed_when: true
+
+    - name: Pin uniform high-precision syslog timestamps (ISO8601 + year + microseconds, every host)
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/00-log-format.conf
+        mode: "0644"
+        content: |
+          # MHBench: force one high-precision file format for syslog + auth.log so every host matches.
+          # Ubuntu 20.04 defaults to RFC3164 (no year, 1s resolution); Kali already emits ISO8601. This
+          # drop-in loads before 50-default.conf, so the syslog/auth.log file rules inherit this template.
+          $ActionFileDefaultTemplate RSYSLOG_FileFormat
+
+    - name: cmdlog directory (sticky+world-writable so each user appends its own file)
+      ansible.builtin.file:
+        path: /var/log/cmdlog
+        state: directory
+        mode: "01777"
+
+    - name: Bash history — timestamps, continuous append, per-command exit-code log
+      ansible.builtin.copy:
+        dest: /etc/profile.d/00-histlog.sh
+        mode: "0644"
+        content: |
+          # MHBench: timestamped, continuously-appended history + per-command exit-code log.
+          export HISTTIMEFORMAT="%F %T "
+          export HISTSIZE=1000000
+          export HISTFILESIZE=1000000
+          shopt -s histappend 2>/dev/null
+          __mhbench_cmdlog() {
+            local ec=$?
+            local last; last=$(history 1 2>/dev/null)
+            last=${last#*[0-9]  }
+            printf '%s\t%s\t%s\t%s\texit=%s\t%s\n' \
+              "$(date +%s)" "$USER" "$(tty 2>/dev/null)" "$PWD" "$ec" "$last" \
+              >> /var/log/cmdlog/"$USER".log 2>/dev/null
+            history -a 2>/dev/null
+          }
+          case "$PROMPT_COMMAND" in
+            *__mhbench_cmdlog*) ;;
+            *) PROMPT_COMMAND="__mhbench_cmdlog${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
+          esac
+
+    - name: Source the history logger from interactive non-login shells too
+      ansible.builtin.lineinfile:
+        path: /etc/bash.bashrc
+        line: "[ -f /etc/profile.d/00-histlog.sh ] && . /etc/profile.d/00-histlog.sh"
+        create: yes
+
+    - name: Auditd rules (Neo23x0 best-practice ruleset, vendored in aux_files)
+      ansible.builtin.copy:
+        src: aux_files/audit.rules
+        dest: /etc/audit/rules.d/ubuntu_logging.rules
+        mode: "0640"
+
+    # Retention, not rules. The stock config rotates at 8 MB and keeps 5 files, so a burst of records
+    # DELETES the oldest — on sonnet_enterprise_b that erased the SSH login which compromised database0.
+    # keep_logs never deletes. auditd.conf takes no drop-ins, so the whole file is replaced; it is read
+    # at daemon start, and this play only *enables* the service, so the deploy boot picks it up.
+    - name: Auditd retention (keep_logs — never delete a record we captured)
+      ansible.builtin.copy:
+        src: aux_files/auditd.conf
+        dest: /etc/audit/auditd.conf
+        mode: "0640"
+
+    - name: Enable logging services at boot
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        daemon_reload: true
+      loop:
+        - auditd
+        - rsyslog

@@ -46,6 +46,22 @@ class DeploymentOrchestrator:
         AnsibleRunner(self._config, self._online, self._playbook_registry, self._conn, self._project_name).run_parallel(topology, mgmt_floating_ip)
         logger.info("Configuration complete: %s", topology.name)
 
+    def collect(self, topology: NetworkTopology, mgmt_floating_ip: str | None, dest: str) -> None:
+        if mgmt_floating_ip is None:
+            logger.info("No management host; skipping log collection for %s", topology.name)
+            return
+        logger.info("Collecting host logs: %s", topology.name)
+        AnsibleRunner(self._config, self._online, self._playbook_registry, self._conn, self._project_name).collect(topology, mgmt_floating_ip, dest)
+        logger.info("Log collection complete: %s", topology.name)
+
+    def rotate_logs(self, topology: NetworkTopology, mgmt_floating_ip: str | None) -> None:
+        if mgmt_floating_ip is None:
+            logger.info("No management host; skipping log rotation for %s", topology.name)
+            return
+        logger.info("Rotating host logs: %s", topology.name)
+        AnsibleRunner(self._config, self._online, self._playbook_registry, self._conn, self._project_name).rotate_logs(topology, mgmt_floating_ip)
+        logger.info("Log rotation complete: %s", topology.name)
+
     def deploy(self, topology: NetworkTopology) -> None:
         logger.info("Deploying topology: %s", topology.name)
         mgmt_floating_ip = self.provision(topology)

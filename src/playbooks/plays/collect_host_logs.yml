@@ -1,0 +1,39 @@
+---
+# Post-experiment (pre-teardown) collection: pull each host's ground-truth logs back to the
+# controller — the harness box, which already reaches every host over the bastion ProxyJump.
+# ignore_unreachable: one dead/half-configured host must not cost us the others' logs.
+# Files land flat at <dest>/<host>/<basename> (e.g. <host>/auth.log, <host>/audit.log).
+- hosts: all
+  remote_user: root
+  gather_facts: false
+  ignore_unreachable: true
+  tasks:
+    - name: Enumerate auth.log + syslog
+      ansible.builtin.find:
+        paths: [/var/log]
+        patterns: ['auth.log*', 'syslog*']
+        recurse: false
+      register: _syslogs
+
+    - name: Enumerate auditd / cmdlog
+      ansible.builtin.find:
+        paths: [/var/log/audit, /var/log/cmdlog]
+        patterns: ['*']
+        recurse: false
+      register: _hostlogs
+
+    - name: Enumerate the uid/gid → name maps (so audit's numeric uid/auid resolve to names offline)
+      ansible.builtin.find:
+        paths: [/etc]
+        patterns: ['passwd', 'group']
+        recurse: false
+      register: _idmaps
+
+    - name: Fetch every log file to <dest>/<host>/<basename>
+      ansible.builtin.fetch:
+        src: "{{ item }}"
+        dest: "{{ dest }}/{{ inventory_hostname }}/{{ item | basename }}"
+        flat: true
+        fail_on_missing: false
+        validate_checksum: false  # these logs are live (rsyslog/auditd still appending) — the post-fetch checksum will mismatch
+      loop: "{{ (_syslogs.files + _hostlogs.files + _idmaps.files) | map(attribute='path') | list }}"

@@ -324,3 +324,117 @@ class AnsibleRunner:
                     f"Topology configure failed on {len(errors)} play(s): "
                     + "; ".join(f"{p}: {e}" for p, e in errors[:5])
                 )
+
+    def collect(self, topology: NetworkTopology, mgmt_floating_ip: str, dest: str) -> None:
+        # Post-experiment log exfil: rebuild the same bastion ProxyJump inventory as run() and
+        # fetch every host's ground-truth logs to <dest>/<host>/. One play over all hosts (ansible
+        # forks parallelize the fetch); ignore_unreachable in the play keeps a dead host from
+        # sinking the rest. Runs before teardown deletes the VMs.
+        logger.debug("Collecting host logs to %s via mgmt %s", dest, mgmt_floating_ip)
+        # every host including the attacker (kali) — its image now bakes in the same telemetry
+        hosts = list(topology.get_all_hosts())
+        for host in hosts:
+            if host.ip_address is None:
+                raise RuntimeError(f"Host '{host.name}' has no ip_address; cannot build ansible inventory.")
+
+        # bastion-hop mux: all hosts share ONE ssh connection to the bastion (separate -W channels) so the
+        # parallel-configure burst can't trip its default MaxStartups (10) and drop the attacker. Per-experiment
+        # socket keyed on the bastion IP + namespaced per-project (same dir as the outer per-target mux) so
+        # concurrent runs — same internal IPs, different bastions — never share a socket.
+        ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
+        proxy = (
+            f"ssh -W %h:%p -i {self._ssh_key_path} "
+            f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
+            f"-o ControlMaster=auto -o ControlPath={ctl}/bastion-{mgmt_floating_ip} -o ControlPersist=300s "
+            f"root@{mgmt_floating_ip}"
+        )
+        inventory_hosts = {
+            host.name: {
+                "ansible_host": str(host.ip_address),
+                "ansible_port": 22,
+                "ansible_user": "root",
+                "ansible_ssh_private_key_file": self._ssh_key_path,
+                "ansible_ssh_common_args": (
+                    f'-o StrictHostKeyChecking=no '
+                    f'-o UserKnownHostsFile=/dev/null '
+                    f'-o ServerAliveInterval=30 '
+                    f'-o ServerAliveCountMax=10 '
+                    f'-o ProxyCommand="{proxy}"'
+                ),
+            }
+            for host in hosts
+        }
+
+        pb_path = self._playbook_registry.get_path("collect_host_logs")
+        project_dir = str((_MHBENCH_DIR / pb_path).resolve().parent)
+        # Retry collection IN PLACE (VMs are still up), each pass re-fetching ONLY the hosts whose
+        # <dest>/<host>/ is still empty — a host that already returned its logs is never re-copied, and a
+        # transient bastion drop no longer costs the whole experiment a re-attack. Best-effort: after the
+        # retries, proceed to teardown with a loud warning for any host that never returned logs, instead of
+        # raising (which would escalate to a full-experiment retry).
+        pending = dict(inventory_hosts)
+        for attempt in range(1, _COLLECT_RETRIES + 1):
+            with tempfile.TemporaryDirectory() as tmp:
+                try:
+                    self._run_playbook("collect_host_logs", {"all": {"hosts": pending}}, {"dest": dest}, tmp, project_dir)
+                except Exception as e:
+                    logger.warning("collect_host_logs attempt %d/%d had failures — retrying incomplete hosts.\n%s",
+                                   attempt, _COLLECT_RETRIES, e)
+            pending = {n: h for n, h in inventory_hosts.items()
+                       if not (Path(dest) / n).is_dir() or not any((Path(dest) / n).iterdir())}
+            if not pending:
+                return
+            if attempt < _COLLECT_RETRIES:
+                time.sleep(_COLLECT_RETRY_DELAY)
+        logger.warning("collect_host_logs: %d host(s) returned no logs after %d attempts (proceeding best-effort): %s",
+                       len(pending), _COLLECT_RETRIES, sorted(pending))
+
+    def rotate_logs(self, topology: NetworkTopology, mgmt_floating_ip: str) -> None:
+        # Pre-attack reset: rebuild the same bastion ProxyJump inventory as collect() and reset every
+        # host's ground-truth logs to empty at the deploy->attack boundary, so post-experiment
+        # collection yields attack-phase-only logs. The harness blocks the attacker on this. Includes
+        # the attacker (kali), same as collect() — its image now bakes in the same telemetry.
+        logger.debug("Rotating host logs via mgmt %s", mgmt_floating_ip)
+        hosts = list(topology.get_all_hosts())
+        for host in hosts:
+            if host.ip_address is None:
+                raise RuntimeError(f"Host '{host.name}' has no ip_address; cannot build ansible inventory.")
+
+        # bastion-hop mux: all hosts share ONE ssh connection to the bastion (separate -W channels) so the
+        # parallel-configure burst can't trip its default MaxStartups (10) and drop the attacker. Per-experiment
+        # socket keyed on the bastion IP + namespaced per-project (same dir as the outer per-target mux) so
+        # concurrent runs — same internal IPs, different bastions — never share a socket.
+        ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
+        proxy = (
+            f"ssh -W %h:%p -i {self._ssh_key_path} "
+            f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
+            f"-o ControlMaster=auto -o ControlPath={ctl}/bastion-{mgmt_floating_ip} -o ControlPersist=300s "
+            f"root@{mgmt_floating_ip}"
+        )
+        inventory_hosts = {
+            host.name: {
+                "ansible_host": str(host.ip_address),
+                "ansible_port": 22,
+                "ansible_user": "root",
+                "ansible_ssh_private_key_file": self._ssh_key_path,
+                "ansible_ssh_common_args": (
+                    f'-o StrictHostKeyChecking=no '
+                    f'-o UserKnownHostsFile=/dev/null '
+                    f'-o ServerAliveInterval=30 '
+                    f'-o ServerAliveCountMax=10 '
+                    f'-o ProxyCommand="{proxy}"'
+                ),
+            }
+            for host in hosts
+        }
+
+        pb_path = self._playbook_registry.get_path("rotate_host_logs")
+        project_dir = str((_MHBENCH_DIR / pb_path).resolve().parent)
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_playbook(
+                "rotate_host_logs",
+                {"all": {"hosts": inventory_hosts}},
+                {},
+                tmp,
+                project_dir,
+            )
