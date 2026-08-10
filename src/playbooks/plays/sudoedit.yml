@@ -32,4 +32,9 @@
       deb: /tmp/sudo_1.8.26-2_amd64.deb
       state: present
       force: yes
+
+  - name: Remove the sudo.deb artifact  # leaks the exact vulnerable version to the attacker
+    file:
+      path: /tmp/sudo_1.8.26-2_amd64.deb
+      state: absent
       

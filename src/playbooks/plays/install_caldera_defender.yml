@@ -9,5 +9,5 @@
 
     - command: "chmod +x ~/install_defender.sh"
 
-    - name: Run installer
-      shell: "nohup ~/install_defender.sh {{ caldera_ip }} >/dev/null 2>&1 &"
+    - name: Run installer, then remove the installer script  # script exits after backgrounding the agent, so the rm runs right after in-background — no leftover artifact, no race
+      shell: "nohup bash -c '~/install_defender.sh {{ caldera_ip }}; rm -f ~/install_defender.sh' >/dev/null 2>&1 &"

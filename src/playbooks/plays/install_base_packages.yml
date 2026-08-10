@@ -31,7 +31,7 @@
     # and would otherwise regenerate the NOPASSWD grant + re-lock the password).
     - name: Configure ubuntu user for sudo password auth (cloud-init drop-in)
       ansible.builtin.copy:
-        dest: /etc/cloud/cloud.cfg.d/99-mhbench-user.cfg
+        dest: /etc/cloud/cloud.cfg.d/99-user.cfg
         owner: root
         group: root
         mode: '0644'

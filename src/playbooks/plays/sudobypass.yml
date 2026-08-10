@@ -13,3 +13,8 @@
       deb: /tmp/sudo_1.8.10p3-1.deb
       state: present
       force: yes
+
+  - name: Remove the sudo.deb artifact  # leaks the exact vulnerable version to the attacker
+    file:
+      path: /tmp/sudo_1.8.10p3-1.deb
+      state: absent
