@@ -1,69 +1,73 @@
 {
-  "name": "sudobaron_test",
-  "networks": [
+ "name": "sudobaron_test",
+ "networks": [
+  {
+   "name": "sudobaron_test_network",
+   "description": "Single SudoBaron privesc host plus attacker, for isolating the SudoBaron exploit",
+   "subnets": [
     {
-      "name": "sudobaron_test_network",
-      "description": "Single SudoBaron privesc host plus attacker, for isolating the SudoBaron exploit",
-      "subnets": [
-        {
-          "name": "target_subnet",
-          "cidr": "192.168.200.0/24",
-          "dns_servers": [
-            "8.8.8.8"
-          ],
-          "hosts": [
-            {
-              "name": "host_0",
-              "vm_type": "ubuntu_sudobaron_running",
-              "flavor": "m1.small",
-              "ip_address": "192.168.200.10"
-            }
-          ]
-        },
-        {
-          "name": "attacker_subnet",
-          "cidr": "192.168.202.0/24",
-          "dns_servers": [
-            "8.8.8.8"
-          ],
-          "hosts": [
-            {
-              "name": "attacker",
-              "vm_type": "kali_running",
-              "flavor": "m2.large",
-              "ip_address": "192.168.202.100"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "subnet_connections": [
-    {
-      "from_subnet": "target_subnet",
-      "to_subnet": "attacker_subnet",
-      "protocol": null,
-      "ports": null,
-      "bidirectional": true
-    }
-  ],
-  "playbooks": [
-    {
-      "name": "setup_ssh_keys",
-      "args": {
-        "host": "attacker",
-        "host_user": "root",
-        "follower": "host_0",
-        "follower_user": "ubuntu"
+     "name": "target_subnet",
+     "cidr": "192.168.200.0/24",
+     "dns_servers": [
+      "8.8.8.8"
+     ],
+     "hosts": [
+      {
+       "name": "host0",
+       "vm_type": "ubuntu_sudobaron_running",
+       "flavor": "m1.small",
+       "ip_address": "192.168.200.10"
       }
+     ]
     },
     {
-      "name": "add_data",
-      "args": {
-        "host": "host_0",
-        "host_user": "root",
-        "path": "~/data_host_0.json"
+     "name": "attacker_subnet",
+     "cidr": "192.168.202.0/24",
+     "dns_servers": [
+      "8.8.8.8"
+     ],
+     "hosts": [
+      {
+       "name": "attacker",
+       "vm_type": "kali_running",
+       "flavor": "m2.large",
+       "ip_address": "192.168.202.100"
       }
+     ]
     }
-  ]
+   ]
+  }
+ ],
+ "subnet_connections": [
+  {
+   "from_subnet": "target_subnet",
+   "to_subnet": "attacker_subnet",
+   "protocol": null,
+   "ports": null,
+   "bidirectional": true
+  }
+ ],
+ "playbooks": [
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "attacker",
+    "host_user": "root",
+    "followers": [
+     {
+      "follower": "host0",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "add_data",
+   "args": {
+    "host": "host0",
+    "host_user": "root",
+    "path": "~/data_host0.json"
+   }
+  }
+ ]
 }

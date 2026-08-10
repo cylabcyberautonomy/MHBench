@@ -1,82 +1,58 @@
 ---
+# One leader ({{ host }}) → all its followers, done in a SINGLE ansible run instead of one run per follower.
+# Accepts the new per-leader shape (followers: [{follower, follower_user}, ...]) OR the legacy single pair
+# (follower/follower_user), so it's safe during a rolling migration. The leader's whole ~/.ssh/config is
+# written in ONE blockinfile task (the block is Jinja-templated over every follower) — NOT a 48-iteration
+# loop, which cost one SSH round-trip per follower (~1 min each through the contended bastion) and made
+# large-env (star) config ~= host count in minutes. gather_facts is off: nothing here uses ansible_facts
+# (ansible_host comes from inventory), so we skip the per-host setup-module round-trip.
 - hosts: "{{ host }}"
+  gather_facts: false
+  vars:
+    _followers: "{{ followers | default([{'follower': follower, 'follower_user': follower_user}]) }}"
   tasks:
-    - name: Check if SSH private key exists
+    - name: Ensure leader .ssh dir
       become: true
       become_user: "{{ host_user }}"
-      stat:
-        path: "~/.ssh/id_ed25519"
-      register: ssh_key_check
+      file: { path: ~/.ssh, state: directory, mode: "0700" }
 
-    - name: Create SSH directory if it does not exist
+    - name: Generate leader SSH key if absent
       become: true
       become_user: "{{ host_user }}"
-      file:
-        path: "~/.ssh"
-        state: directory
-        mode: "0700"
-      when: not ssh_key_check.stat.exists
+      shell: { cmd: 'ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -q -N ""', creates: ~/.ssh/id_ed25519 }
 
-    - name: Generate SSH key if it does not exist
+    - name: Read leader public key
       become: true
       become_user: "{{ host_user }}"
-      shell:
-        cmd: ssh-keygen -t ed25519 -f '.ssh/id_ed25519' -q -N ""
-        creates: "~/.ssh/id_ed25519"
-        chdir: "~"
-      when: not ssh_key_check.stat.exists
+      ansible.builtin.slurp: { src: ~/.ssh/id_ed25519.pub }
+      register: leader_pub
 
-    - name: Ensure correct permissions for SSH key
-      become: true
-      become_user: "{{ host_user }}"
-      file:
-        path: ~/.ssh/id_ed25519
-        mode: '0600'
-      when: ssh_key_check.stat.exists
-
-    - name: Read SSH key
-      become: true
-      become_user: "{{ host_user }}"
-      ansible.builtin.slurp:
-        src: "~/.ssh/id_ed25519.pub"
-      register: leader_ssh_key
-
-    - name: Save the public key for use
+    - name: Publish leader pubkey as a fact
       set_fact:
-        public_key: "{{ leader_ssh_key['content'] | b64decode }}"
+        public_key: "{{ leader_pub.content | b64decode }}"
 
-    - name: add to ssh config
+    - name: Write every follower into the leader's ~/.ssh/config in ONE task
       become: true
       become_user: "{{ host_user }}"
       blockinfile:
-        state: present
-        insertafter: EOF
-        dest: "~/.ssh/config"
-        content: |
-          Host {{ follower }}_{{ follower_user }}
-            HostName {{ hostvars[follower]['ansible_host'] }}
-            User {{ follower_user }}
-            IdentityFile ~/.ssh/id_ed25519
+        path: ~/.ssh/config
         create: true
         mode: "0600"
-        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ follower }}_{{ follower_user }}"
+        marker: "# {mark} phdpt-followers"
+        block: |
+          {% for f in _followers %}
+          Host {{ f.follower }}_{{ f.follower_user }}
+            HostName {{ hostvars[f.follower]['ansible_host'] }}
+            User {{ f.follower_user }}
+            IdentityFile ~/.ssh/id_ed25519
+          {% endfor %}
 
-- hosts: "{{ follower }}"
+- hosts: "{{ (followers | default([{'follower': follower, 'follower_user': follower_user}])) | map(attribute='follower') | join(',') }}"
+  gather_facts: false
+  vars:
+    _followers: "{{ followers | default([{'follower': follower, 'follower_user': follower_user}]) }}"
   tasks:
-    - name: Add public SSH key to authorized keys
+    - name: Add leader pubkey to this follower's authorized_keys
       authorized_key:
-        user: "{{ follower_user }}"
-        key: "{{ hostvars[host]['public_key'] }}"
-
-- hosts: "{{ follower }}"
-  tasks:
-    - name: Print actual hostname and IP
-      command: hostname -I
-      register: actual_ip
-    - name: Show actual IP
-      debug:
-        msg: "Connected to IP: {{ actual_ip.stdout }}"
-    - name: Add public SSH key to authorized keys
-      authorized_key:
-        user: "{{ follower_user }}"
+        user: "{{ (_followers | selectattr('follower', 'equalto', inventory_hostname) | first).follower_user }}"
         key: "{{ hostvars[host]['public_key'] }}"

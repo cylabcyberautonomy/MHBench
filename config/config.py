@@ -52,6 +52,7 @@ class Config(BaseModel):
     openstack: Optional[OpenStackConfig] = None
     management: Optional[ManagementConfig] = None
     c2c: Optional[C2CConfig] = None
+    ansible_verbosity: int = 0
 
     @classmethod
     def load(cls, config_path: Path = CONFIG_PATH) -> "Config":

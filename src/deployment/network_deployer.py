@@ -42,6 +42,17 @@ class NetworkDeployer:
             time.sleep(2)
         logger.info("Router ACTIVE")
 
+        # neutron sometimes brings the router up ACTIVE but silently drops the create-time external gateway,
+        # leaving it with no SNAT/egress (VMs can't reach the internet; floating IPs don't route). Force it
+        # and confirm it attached before proceeding.
+        deadline = time.monotonic() + 60
+        while not self._conn.network.get_router(router.id).external_gateway_info:
+            if time.monotonic() > deadline:
+                raise TimeoutError("Router external gateway did not attach within 60s.")
+            self._conn.network.update_router(router.id, external_gateway_info={"network_id": ext_net.id})
+            time.sleep(3)
+        logger.info("Router external gateway attached")
+
         if self._management:
             mgmt = self._management
             logger.info("Creating management_network...")
@@ -178,7 +189,7 @@ class NetworkDeployer:
             logger.info("Security group '%s' ready", self._n(subnet.sg_name))
 
         if self._management:
-            logger.info("Creating security group 'management_sg'...")
+            logger.info("Creating security group '%s'...", self._n("management_sg"))
             mgmt_sg = self._conn.network.create_security_group(
                 name=self._n("management_sg"),
                 description="Security group for management network",
@@ -192,7 +203,7 @@ class NetworkDeployer:
                 except ConflictException:
                     pass
                 time.sleep(1)
-            logger.info("Security group 'management_sg' ready")
+            logger.info("Security group '%s' ready", self._n("management_sg"))
 
     def teardown(self, topology: NetworkTopology) -> None:
         pid = self._project_id

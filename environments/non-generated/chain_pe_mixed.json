@@ -1,9 +1,9 @@
 {
- "name": "star",
+ "name": "chain_pe_mixed",
  "networks": [
   {
-   "name": "star_network",
-   "description": "Star topology: webservers (struts), netcat hosts, ssh-key hosts",
+   "name": "chain_pe_mixed_network",
+   "description": "25 privesc hosts, randomized SSH-chain order and randomized per host privesc with seed set to 42",
    "subnets": [
     {
      "name": "ring_subnet",
@@ -14,151 +14,151 @@
      "hosts": [
       {
        "name": "host0",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.10"
       },
       {
        "name": "host1",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.11"
       },
       {
        "name": "host2",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.12"
       },
       {
        "name": "host3",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.13"
       },
       {
        "name": "host4",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.14"
       },
       {
        "name": "host5",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.15"
       },
       {
        "name": "host6",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.16"
       },
       {
        "name": "host7",
-       "vm_type": "webserver_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.17"
       },
       {
        "name": "host8",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.18"
       },
       {
        "name": "host9",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.19"
       },
       {
        "name": "host10",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.20"
       },
       {
        "name": "host11",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.21"
       },
       {
        "name": "host12",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.22"
       },
       {
        "name": "host13",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.23"
       },
       {
        "name": "host14",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.24"
       },
       {
        "name": "host15",
-       "vm_type": "ubuntu_netcat_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.25"
       },
       {
        "name": "host16",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.26"
       },
       {
        "name": "host17",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.27"
       },
       {
        "name": "host18",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.28"
       },
       {
        "name": "host19",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.29"
       },
       {
        "name": "host20",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.30"
       },
       {
        "name": "host21",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_writeable_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.31"
       },
       {
        "name": "host22",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.32"
       },
       {
        "name": "host23",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.33"
       },
       {
        "name": "host24",
-       "vm_type": "ubuntu_base_running",
+       "vm_type": "ubuntu_sudobaron_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.34"
       }
@@ -199,39 +199,319 @@
     "host_user": "root",
     "followers": [
      {
-      "follower": "host16",
+      "follower": "host14",
       "follower_user": "ubuntu"
-     },
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host14",
+    "host_user": "ubuntu",
+    "followers": [
      {
-      "follower": "host17",
+      "follower": "host13",
       "follower_user": "ubuntu"
-     },
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host13",
+    "host_user": "ubuntu",
+    "followers": [
      {
       "follower": "host18",
       "follower_user": "ubuntu"
-     },
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host18",
+    "host_user": "ubuntu",
+    "followers": [
      {
-      "follower": "host19",
+      "follower": "host5",
       "follower_user": "ubuntu"
-     },
-     {
-      "follower": "host20",
-      "follower_user": "ubuntu"
-     },
-     {
-      "follower": "host21",
-      "follower_user": "ubuntu"
-     },
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host5",
+    "host_user": "ubuntu",
+    "followers": [
      {
       "follower": "host22",
       "follower_user": "ubuntu"
-     },
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host22",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host20",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host20",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host24",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host24",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host9",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host9",
+    "host_user": "ubuntu",
+    "followers": [
      {
       "follower": "host23",
       "follower_user": "ubuntu"
-     },
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host23",
+    "host_user": "ubuntu",
+    "followers": [
      {
-      "follower": "host24",
+      "follower": "host1",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host1",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host15",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host15",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host7",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host7",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host16",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host16",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host0",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host0",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host19",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host19",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host8",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host8",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host17",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host17",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host11",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host11",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host21",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host21",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host12",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host12",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host2",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host2",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host3",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host3",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host10",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host10",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host6",
+      "follower_user": "ubuntu"
+     }
+    ]
+   }
+  },
+  {
+   "name": "setup_ssh_keys",
+   "args": {
+    "host": "host6",
+    "host_user": "ubuntu",
+    "followers": [
+     {
+      "follower": "host4",
       "follower_user": "ubuntu"
      }
     ]
@@ -241,7 +521,7 @@
    "name": "add_data",
    "args": {
     "host": "host0",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host0.json"
    }
   },
@@ -249,7 +529,7 @@
    "name": "add_data",
    "args": {
     "host": "host1",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host1.json"
    }
   },
@@ -257,7 +537,7 @@
    "name": "add_data",
    "args": {
     "host": "host2",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host2.json"
    }
   },
@@ -265,7 +545,7 @@
    "name": "add_data",
    "args": {
     "host": "host3",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host3.json"
    }
   },
@@ -273,7 +553,7 @@
    "name": "add_data",
    "args": {
     "host": "host4",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host4.json"
    }
   },
@@ -281,7 +561,7 @@
    "name": "add_data",
    "args": {
     "host": "host5",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host5.json"
    }
   },
@@ -289,7 +569,7 @@
    "name": "add_data",
    "args": {
     "host": "host6",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host6.json"
    }
   },
@@ -297,7 +577,7 @@
    "name": "add_data",
    "args": {
     "host": "host7",
-    "host_user": "tomcat",
+    "host_user": "root",
     "path": "~/data_host7.json"
    }
   },
@@ -369,7 +649,7 @@
    "name": "add_data",
    "args": {
     "host": "host16",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host16.json"
    }
   },
@@ -377,7 +657,7 @@
    "name": "add_data",
    "args": {
     "host": "host17",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host17.json"
    }
   },
@@ -385,7 +665,7 @@
    "name": "add_data",
    "args": {
     "host": "host18",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host18.json"
    }
   },
@@ -393,7 +673,7 @@
    "name": "add_data",
    "args": {
     "host": "host19",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host19.json"
    }
   },
@@ -401,7 +681,7 @@
    "name": "add_data",
    "args": {
     "host": "host20",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host20.json"
    }
   },
@@ -409,7 +689,7 @@
    "name": "add_data",
    "args": {
     "host": "host21",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host21.json"
    }
   },
@@ -417,7 +697,7 @@
    "name": "add_data",
    "args": {
     "host": "host22",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host22.json"
    }
   },
@@ -425,7 +705,7 @@
    "name": "add_data",
    "args": {
     "host": "host23",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host23.json"
    }
   },
@@ -433,7 +713,7 @@
    "name": "add_data",
    "args": {
     "host": "host24",
-    "host_user": "ubuntu",
+    "host_user": "root",
     "path": "~/data_host24.json"
    }
   }

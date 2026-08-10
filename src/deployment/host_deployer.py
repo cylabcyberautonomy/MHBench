@@ -11,10 +11,14 @@ from src.deployment.online_registry_service import OnlineRegistryService
 
 logger = logging.getLogger(__name__)
 
-_BATCH_SIZE = 10
-_DEPLOY_TIMEOUT = 600
+_BATCH_SIZE = 6   # per-env cap on concurrent same-flavor VM-creates; with the harness provision-gate (5 envs) this bounds global creates to 5*6=30 — the known-safe ceiling (batch 10 * provision 6 = 60 half-provisioned networking -> setup_ssh_keys UNREACHABLE -> whole-env retries)
+_DEPLOY_TIMEOUT = 1200  # 20 min. The m2.large attacker's 7.2GB Kali image is pulled from Glance on any node that
+                        # doesn't have it cached in _base; under a concurrent-spawn burst that pull can exceed 10 min
+                        # and stall the VM in BUILD. Once a node has pulled Kali once, later spawns there are fast
+                        # local copies — so this ceiling only bites the FIRST cache-miss per node during a big run.
 _DELETE_TIMEOUT = 300
 _POLL_INTERVAL = 5
+_VM_CREATE_RETRIES = 3  # per-VM recreate attempts on ERROR (NoValidHost during a packing burst) — retry the VM, not the env
 
 
 class HostDeployer:
@@ -97,6 +101,7 @@ class HostDeployer:
                 networks=[{"uuid": os_mgmt_net.id, "fixed_ip": mgmt.host_ip}],
                 security_groups=[{"name": self._n("management_sg")}],
                 key_name=self._ssh_key_name,
+                config_drive=True,  # metadata+network_data off the attached ISO, not the neutron metadata/DHCP agents (concurrency ceiling)
             )
             time.sleep(1)
             deadline = time.monotonic() + _DEPLOY_TIMEOUT
@@ -123,13 +128,26 @@ class HostDeployer:
             logger.info("Assigned floating IP %s to management_host", mgmt_floating_ip)
 
         all_hosts = topology.get_all_hosts()
-        # Create larger-image hosts first — they take longest to boot, so kick them off earliest.
+        # Create the biggest hosts first — above all the m2.large attacker, which needs the most scheduling/RAM
+        # and starves behind a swarm of m1.small VMs otherwise. It also has the SMALLEST image, so the old
+        # image-size sort put it dead last (in the most-loaded final batch) — the exact starvation we saw.
+        # Flavor size dominates the order; image size is only the tiebreak among equal flavors.
+        flavor_ram = {fl: getattr(self._conn.compute.find_flavor(fl), "ram", 0) or 0 for fl in {h.flavor for h in all_hosts}}
         img_size = {vt: getattr(self._conn.image.find_image(self._online.get_base_image(vt)), "size", 0) or 0
                     for vt in {h.vm_type for h in all_hosts}}
-        hosts = sorted(all_hosts, key=lambda h: img_size[h.vm_type], reverse=True)
-        for i in range(0, len(hosts), _BATCH_SIZE):
-            batch = hosts[i:i + _BATCH_SIZE]
-            pending: dict[str, tuple[Host, object, object]] = {}
+        hosts = sorted(all_hosts, key=lambda h: (flavor_ram[h.flavor], img_size[h.vm_type]), reverse=True)
+        # Tier the batches by flavor size: a batch never mixes a bigger flavor with smaller ones. We block
+        # per batch (wait for ACTIVE), so the m2.large attacker gets its own tier and fully comes up BEFORE
+        # the m1.small swarm is even created — otherwise the small hosts, which boot faster, reach ACTIVE first.
+        batches: list[list[Host]] = []
+        for host in hosts:
+            if batches and len(batches[-1]) < _BATCH_SIZE and flavor_ram[batches[-1][0].flavor] == flavor_ram[host.flavor]:
+                batches[-1].append(host)
+            else:
+                batches.append([host])
+        vm_retries: dict[str, int] = {}  # per-host recreate count across batches — retry the VM on ERROR, not the whole env
+        for batch in batches:
+            pending: dict[str, tuple[Host, object, object, dict]] = {}
 
             for host in batch:
                 base_image_name = self._online.get_base_image(host.vm_type)
@@ -152,33 +170,54 @@ class HostDeployer:
                 if host.ip_address:
                     network_spec["fixed_ip"] = str(host.ip_address)
 
-                logger.info("Submitting: %s  image=%s  flavor=%s", self._n(host.name), image.name, flavor.name)
-                time.sleep(1)
-                server = self._conn.compute.create_server(
-                    name=self._n(host.name),
+                create_kwargs = dict(
+                    name=self._n(host.name),    # OpenStack display label — experiment-prefixed, collision-safe
+                    hostname=host.name,         # in-VM hostname — clean DNS-safe host-N, decoupled from the prefix
                     imageRef=image.id,
                     flavorRef=flavor.id,
                     networks=[network_spec],
                     security_groups=[{"name": self._n(subnet.sg_name)}],
                     key_name=self._ssh_key_name,
+                    config_drive=True,  # metadata+network_data off the attached ISO, not the neutron metadata/DHCP agents (concurrency ceiling)
                 )
-                pending[server.id] = (host, flavor, image)
+                logger.info("Submitting: %s  image=%s  flavor=%s", self._n(host.name), image.name, flavor.name)
+                time.sleep(1)
+                server = self._conn.compute.create_server(**create_kwargs)  # kept for recreate-on-ERROR
+                pending[server.id] = (host, flavor, image, create_kwargs)
 
             deadline = time.monotonic() + _DEPLOY_TIMEOUT
             while pending:
                 if time.monotonic() > deadline:
-                    raise TimeoutError(f"Timed out waiting for: {[h.name for h, _, _ in pending.values()]}")
+                    raise TimeoutError(f"Timed out waiting for: {[h.name for h, *_ in pending.values()]}")
                 time.sleep(_POLL_INTERVAL)
                 done = []
-                for server_id, (host, flavor, image) in pending.items():
+                recreated: list[tuple[str, str, tuple]] = []  # (old_id, new_id, pending-value) — applied after the scan
+                for server_id, (host, flavor, image, create_kwargs) in pending.items():
                     current = self._conn.compute.get_server(server_id)
                     if current.status == "ACTIVE":
                         self._log_instance_info(self._n(host.name), current, flavor, image)
                         done.append(server_id)
                     elif current.status == "ERROR":
-                        raise RuntimeError(f"Instance '{host.name}' entered ERROR: {getattr(current, 'fault', 'unknown')}")
+                        # A single VM failing to schedule (NoValidHost during a packing burst) is transient — delete
+                        # and recreate JUST this VM rather than raising and forcing a whole-environment retry.
+                        n = vm_retries.get(host.name, 0)
+                        if n >= _VM_CREATE_RETRIES:
+                            raise RuntimeError(f"Instance '{host.name}' entered ERROR after {n} recreate attempts: {getattr(current, 'fault', 'unknown')}")
+                        vm_retries[host.name] = n + 1
+                        logger.warning("Instance '%s' entered ERROR (%s) — recreating (attempt %d/%d)",
+                                       host.name, getattr(current, "fault", "unknown"), n + 1, _VM_CREATE_RETRIES)
+                        try:
+                            self._conn.compute.delete_server(server_id)
+                        except Exception:
+                            logger.exception("Failed deleting errored server for '%s' before recreate", host.name)
+                        time.sleep(1)
+                        new = self._conn.compute.create_server(**create_kwargs)
+                        recreated.append((server_id, new.id, (host, flavor, image, create_kwargs)))
                 for server_id in done:
                     del pending[server_id]
+                for old_id, new_id, val in recreated:
+                    del pending[old_id]
+                    pending[new_id] = val
 
         return mgmt_floating_ip
 

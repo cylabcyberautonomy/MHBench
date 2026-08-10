@@ -23,22 +23,27 @@ def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s", level=level)
 
 
-def _load_config(config_path: Path) -> Config:
+def _load_config(config_path: Path, ansible_verbosity: int = 0) -> Config:
     if not config_path.exists():
         raise click.ClickException(f"Config file not found: {config_path}")
-    return Config.load(config_path)
+    config = Config.load(config_path)
+    config.ansible_verbosity = ansible_verbosity
+    return config
 
 
 @click.group()
 @click.option("--config", "config_path", default=str(_CONFIG_PATH), show_default=True,
               type=click.Path(path_type=Path), help="Path to config.yaml")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
+@click.option("--ansible-verbosity", type=int, default=0, envvar="ANSIBLE_VERBOSITY",
+              help="Ansible verbosity 0-4 (-vvvv); also honors $ANSIBLE_VERBOSITY")
 @click.pass_context
-def cli(ctx: click.Context, config_path: Path, verbose: bool) -> None:
+def cli(ctx: click.Context, config_path: Path, verbose: bool, ansible_verbosity: int) -> None:
     """MHBench v3 — multi-host cybersecurity benchmark CLI."""
     _setup_logging(verbose)
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config_path
+    ctx.obj["ansible_verbosity"] = ansible_verbosity
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +64,7 @@ def compile(ctx: click.Context, images: tuple[str, ...], compile_all: bool, forc
     if not images and not compile_all:
         raise click.UsageError("Specify at least one IMAGE name or pass --all.")
 
-    config = _load_config(ctx.obj["config_path"])
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
     offline = OfflineRegistryService(config)
     playbook_registry = PlaybookRegistryService(config)
     service = CompilerService(config, offline, playbook_registry)
@@ -99,7 +104,7 @@ def provision(ctx: click.Context, spec: Path, c2c_url: str | None, project_name:
     from urllib.parse import urlparse
     from config.config import C2CConfig
 
-    config = _load_config(ctx.obj["config_path"])
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
     offline = OfflineRegistryService(config)
     online = OnlineRegistryService(config)
     parser = JsonSpecParser()
@@ -150,7 +155,7 @@ def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str 
     from urllib.parse import urlparse
     from config.config import C2CConfig
 
-    config = _load_config(ctx.obj["config_path"])
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
     online = OnlineRegistryService(config)
     parser = JsonSpecParser()
 
@@ -191,7 +196,7 @@ def deploy(ctx: click.Context, spec: Path, validate_only: bool, c2c_url: str | N
     from urllib.parse import urlparse
     from config.config import C2CConfig
 
-    config = _load_config(ctx.obj["config_path"])
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
     offline = OfflineRegistryService(config)
     online = OnlineRegistryService(config)
     parser = JsonSpecParser()
@@ -239,7 +244,7 @@ def teardown(ctx: click.Context, spec: Path, yes: bool, project_name: str | None
 
     SPEC is the same environment JSON used to deploy (e.g. environments/dumbbell.json).
     """
-    config = _load_config(ctx.obj["config_path"])
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
     parser = JsonSpecParser()
 
     click.echo(f"Parsing spec: {spec}")

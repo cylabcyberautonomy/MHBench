@@ -1,5 +1,5 @@
 {
-  "name": "demo_network_6_topology",
+  "name": "generated_network_6",
   "networks": [
     {
       "name": "demo_network_6",
@@ -148,6 +148,13 @@
     {
       "from_subnet": "subnet_0",
       "to_subnet": "subnet_1",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "subnet_0",
+      "to_subnet": "attacker_subnet",
       "protocol": null,
       "ports": null,
       "bidirectional": true
