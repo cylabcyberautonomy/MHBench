@@ -13,6 +13,7 @@ from src.deployment.online_registry_service import OnlineRegistryService
 from src.deployment.orchestrator import DeploymentOrchestrator
 from src.deployment.openstack_client import build_connection
 from src.deployment.spec_parsers import JsonSpecParser
+from src.deployment.upload_manager import UploadManager
 from src.playbooks.playbook_registry_service import PlaybookRegistryService
 
 _CONFIG_PATH = Path("config/config.yaml")
@@ -54,8 +55,9 @@ def cli(ctx: click.Context, config_path: Path, verbose: bool, ansible_verbosity:
 @click.argument("images", nargs=-1)
 @click.option("--all", "compile_all", is_flag=True, help="Compile every non-root image in the offline registry")
 @click.option("--force", is_flag=True, help="Recompile even if the output file already exists")
+@click.option("--compress", is_flag=True, help="Also zlib-compress the output qcow2 (smaller/faster upload; compaction happens regardless)")
 @click.pass_context
-def compile(ctx: click.Context, images: tuple[str, ...], compile_all: bool, force: bool) -> None:
+def compile(ctx: click.Context, images: tuple[str, ...], compile_all: bool, force: bool, compress: bool) -> None:
     """Compile one or more offline VM images.
 
     IMAGES are names from the offline registry (e.g. ubuntu_base webserver).
@@ -71,7 +73,7 @@ def compile(ctx: click.Context, images: tuple[str, ...], compile_all: bool, forc
 
     if compile_all:
         click.echo("Compiling all images...")
-        service.compile_all(force=force)
+        service.compile_all(force=force, compress=compress)
     else:
         for name in images:
             if name not in offline.list_images():
@@ -79,8 +81,50 @@ def compile(ctx: click.Context, images: tuple[str, ...], compile_all: bool, forc
                     f"Unknown image '{name}'. Available: {', '.join(offline.list_images())}"
                 )
             click.echo(f"Compiling '{name}' (with ancestors)...")
-            service.compile_with_ancestors(name, force=force)
+            service.compile_with_ancestors(name, force=force, compress=compress)
 
+    click.echo("Done.")
+
+
+# ---------------------------------------------------------------------------
+# upload
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.argument("images", nargs=-1)
+@click.option("--all", "upload_all", is_flag=True, help="Upload every compiled non-root image")
+@click.option("--force", is_flag=True, help="Re-upload (delete + recreate) even if already in Glance")
+@click.pass_context
+def upload(ctx: click.Context, images: tuple[str, ...], upload_all: bool, force: bool) -> None:
+    """Push compiled qcow2 images to Glance.
+
+    IMAGES are names from the offline registry (e.g. ubuntu_base webserver sensor).
+    Pass --all to upload every compiled non-root image. Run after `compile`.
+    """
+    if not images and not upload_all:
+        raise click.UsageError("Specify at least one IMAGE name or pass --all.")
+
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
+    if config.openstack is None:
+        raise click.ClickException("openstack config block is required for upload.")
+
+    offline = OfflineRegistryService(config)
+    conn = build_connection(config.openstack)
+    manager = UploadManager(conn, config, offline)
+
+    if upload_all:
+        names = [n for n in offline.list_images() if offline.get_parent(n) is not None]
+    else:
+        for name in images:
+            if name not in offline.list_images():
+                raise click.ClickException(
+                    f"Unknown image '{name}'. Available: {', '.join(offline.list_images())}"
+                )
+        names = list(images)
+
+    for name in names:
+        click.echo(f"Uploading '{name}'...")
+        manager.upload_image(name, force=force)
     click.echo("Done.")
 
 

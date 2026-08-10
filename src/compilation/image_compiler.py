@@ -17,14 +17,18 @@ _CLEANUP_AND_SHUTDOWN = """\
 cloud-init clean --logs 2>/dev/null || true
 apt-get clean 2>/dev/null || true
 rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+systemctl disable --now apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>/dev/null || true
+systemctl mask apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>/dev/null || true
 rm -f /etc/ssh/ssh_host_* 2>/dev/null || true
 truncate -s 0 /etc/machine-id 2>/dev/null || true
 rm -f /var/lib/dbus/machine-id 2>/dev/null || true
+truncate -s 0 /var/log/auth.log /var/log/syslog /var/log/audit/audit.log 2>/dev/null || true
+rm -f /var/log/cmdlog/* /var/log/netflow/* /root/.bash_history /home/*/.bash_history 2>/dev/null || true
 shutdown -h now
 """
 
 
-def compile_image(base_image: Path, playbooks: list[Path], output_path: Path, disk_size_gb: int | None = None) -> None:
+def compile_image(base_image: Path, playbooks: list[Path], output_path: Path, disk_size_gb: int | None = None, compress: bool = False) -> None:
     tmp = output_path.with_suffix(".qcow2.tmp")
     tmp.unlink(missing_ok=True)
     shutil.copy2(base_image, tmp)
@@ -70,7 +74,7 @@ runcmd:
         if not kvm:
             logger.warning("KVM not available — VM will run slowly.")
         proc = subprocess.Popen(
-            ["qemu-system-x86_64", *kvm, "-m", "2048", "-smp", "2",
+            ["qemu-system-x86_64", *kvm, "-m", "4096", "-smp", "4",
              "-drive", f"file={tmp},format=qcow2,if=virtio",
              "-drive", f"file={workdir / 'seed.iso'},format=raw,if=virtio",
              "-netdev", f"user,id=net0,hostfwd=tcp::{ssh_port}-:22",
@@ -151,5 +155,9 @@ runcmd:
         raise
 
     shutil.rmtree(workdir, ignore_errors=True)
-    tmp.rename(output_path)
+    # convert (not rename): always compacts away the install-churn clusters qcow2 never reclaims; -c also
+    # zlib-compresses (smaller/reliable upload + faster per-node cache-warm — nova decompresses once into
+    # _base, so running guests read uncompressed, no deploy penalty).
+    subprocess.run(["qemu-img", "convert", "-O", "qcow2", *(["-c"] if compress else []), str(tmp), str(output_path)], check=True)
+    tmp.unlink(missing_ok=True)
     logger.info("Compiled: %s", output_path)

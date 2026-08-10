@@ -23,7 +23,7 @@ class CompilerService:
         self._offline = offline_registry
         self._playbooks = playbook_registry
 
-    def compile_image(self, name: str, force: bool = False) -> None:
+    def compile_image(self, name: str, force: bool = False, compress: bool = False) -> None:
         output = self._images_dir / f"{name}.qcow2"
         if not force and output.exists():
             logger.info("'%s' already compiled — skipping.", name)
@@ -38,18 +38,18 @@ class CompilerService:
         playbook_paths = [self._playbooks.get_path(pb) for pb in self._offline.get_playbooks(name)]
         disk_size_gb = self._offline.get_disk_size_gb(name)
         logger.info("Compiling '%s' from parent '%s'.", name, parent)
-        _bake(Path(parent_location), playbook_paths, output, disk_size_gb=disk_size_gb)
+        _bake(Path(parent_location), playbook_paths, output, disk_size_gb=disk_size_gb, compress=compress)
         self._offline.update_location(name, str(output))
 
-    def compile_with_ancestors(self, name: str, force: bool = False) -> None:
+    def compile_with_ancestors(self, name: str, force: bool = False, compress: bool = False) -> None:
         chain = self._offline.get_ancestor_chain(name)
         for image_name in chain[1:]:
-            self.compile_image(image_name, force=force)
+            self.compile_image(image_name, force=force, compress=compress)
 
-    def compile_all(self, force: bool = False) -> None:
+    def compile_all(self, force: bool = False, compress: bool = False) -> None:
         images = self._offline.list_images()
         ordered = sorted(images, key=lambda n: len(self._offline.get_ancestor_chain(n)))
         for name in ordered:
             if self._offline.get_parent(name) is None:
                 continue
-            self.compile_image(name, force=force)
+            self.compile_image(name, force=force, compress=compress)
