@@ -1,0 +1,18 @@
+---
+# Bake-time fix for the Kali attacker image.
+# The stock Kali cloud image mounts /boot/efi by UUID with `defaults`, which makes the mount REQUIRED.
+# When that EFI device is slow or absent at boot (a device-enumeration race that hit ~28% of Kali boots
+# on the cluster), the mount fails -> local-fs.target fails -> the VM drops to EMERGENCY MODE with sshd
+# never starting -> the harness sees the attacker as UNREACHABLE and the whole experiment retries/fails.
+# A running VM never needs /boot/efi mounted (it only matters for kernel/bootloader updates, which these
+# ephemeral attack VMs never do), so making it `nofail` with a short device-timeout lets a missing EFI
+# partition be skipped instead of bricking the boot.
+- hosts: "{{ host }}"
+  remote_user: root
+  become: yes
+  tasks:
+    - name: Make the /boot/efi fstab entry non-fatal (nofail) so a slow/absent EFI device can't emergency-mode the boot
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '(\s/boot/efi\s+\S+\s+)defaults'
+        replace: '\1nofail,x-systemd.device-timeout=1'

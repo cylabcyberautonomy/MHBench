@@ -24,6 +24,7 @@ truncate -s 0 /etc/machine-id 2>/dev/null || true
 rm -f /var/lib/dbus/machine-id 2>/dev/null || true
 truncate -s 0 /var/log/auth.log /var/log/syslog /var/log/audit/audit.log 2>/dev/null || true
 rm -f /var/log/cmdlog/* /var/log/netflow/* /root/.bash_history /home/*/.bash_history 2>/dev/null || true
+rm -f /root/.ssh/authorized_keys /etc/ssh/sshd_config.d/00-compile.conf 2>/dev/null || true
 shutdown -h now
 """
 
@@ -44,6 +45,17 @@ def compile_image(base_image: Path, playbooks: list[Path], output_path: Path, di
             check=True, capture_output=True,
         )
         pub_key = (workdir / "key.pub").read_text().strip()
+
+        # Put the ephemeral key + root-login permission directly on the disk so compiler access never
+        # depends on the guest's cloud-init honoring the NoCloud seed below (some cloud images use a
+        # datasource that ignores it). Runs for every image; cleaned out by _CLEANUP_AND_SHUTDOWN.
+        subprocess.run(
+            ["virt-customize", "-a", str(tmp),
+             "--ssh-inject", f"root:string:{pub_key}",
+             "--run-command",
+             "printf 'PermitRootLogin prohibit-password\\n' > /etc/ssh/sshd_config.d/00-compile.conf"],
+            check=True, capture_output=True,
+        )
 
         # Cloud-init seed ISO
         (workdir / "user-data").write_text(f"""\
@@ -95,20 +107,25 @@ runcmd:
         else:
             raise TimeoutError(f"SSH port {ssh_port} did not open within 300s.")
 
-        # Wait for cloud-init to finish
-        deadline = time.monotonic() + 120
+        # Reachable = the injected key works. Then let cloud-init settle so playbooks don't race boot-time
+        # apt jobs. Neither step depends on the guest having processed the NoCloud seed (Kali ignores it).
+        deadline = time.monotonic() + 600
         while time.monotonic() < deadline:
-            result = subprocess.run(
-                ["ssh", *_SSH_OPTS.split(), "-i", str(workdir / "key"),
-                 "-p", str(ssh_port), "root@127.0.0.1",
-                 "test -f /tmp/cloud-init-done"],
+            if subprocess.run(
+                ["ssh", *_SSH_OPTS.split(), "-o", "ConnectTimeout=10", "-i", str(workdir / "key"),
+                 "-p", str(ssh_port), "root@127.0.0.1", "true"],
                 capture_output=True,
-            )
-            if result.returncode == 0:
+            ).returncode == 0:
                 break
             time.sleep(5)
         else:
-            raise TimeoutError("Cloud-init did not complete within 120s.")
+            raise TimeoutError("VM did not become SSH-reachable within 600s.")
+        subprocess.run(
+            ["ssh", *_SSH_OPTS.split(), "-o", "ConnectTimeout=10", "-i", str(workdir / "key"),
+             "-p", str(ssh_port), "root@127.0.0.1",
+             "command -v cloud-init >/dev/null 2>&1 && cloud-init status --wait >/dev/null 2>&1 || true"],
+            capture_output=True,
+        )
 
         # Run playbooks
         (workdir / "project").symlink_to(playbooks[0].parent.resolve())

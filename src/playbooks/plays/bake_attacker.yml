@@ -1,4 +1,7 @@
 ---
+# Online (deploy-time) only: download the Caldera sandcat agent from the per-experiment C2 (needs the
+# runtime caldera_ip:port, so it cannot be baked). The static tooling (git/perl/nikto) is now baked
+# offline into kali_base via bake_attacker_tools.
 - hosts: "{{ host }}"
   become: true
   become_user: '{{ user }}'
@@ -8,44 +11,6 @@
       wait_for_connection:
         delay: 0
         timeout: 60
-
-    - name: Install git and perl
-      apt:
-        name:
-          - git
-          - perl
-        state: present
-        update_cache: false
-
-    - name: Remove broken nikto install if present
-      file:
-        path: /var/lib/nikto
-        state: absent
-
-    - name: Clone nikto from GitHub
-      git:
-        repo: https://github.com/sullo/nikto.git
-        dest: /var/lib/nikto
-        version: main
-
-    - name: Make nikto.pl executable
-      file:
-        path: /var/lib/nikto/program/nikto.pl
-        mode: '0755'
-
-    - name: Point nikto wrapper at correct path
-      copy:
-        dest: /usr/bin/nikto
-        mode: '0755'
-        content: |
-          #!/usr/bin/env sh
-          set -e
-          exec /var/lib/nikto/program/nikto.pl "$@"
-
-    - name: Verify nikto is functional
-      command: nikto -Version
-      register: nikto_version
-      failed_when: "'nikto' not in nikto_version.stdout | lower and 'nikto' not in nikto_version.stderr | lower"
 
     - name: Download Caldera sandcat agent binary from C2
       shell: >

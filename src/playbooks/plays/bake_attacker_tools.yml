@@ -1,0 +1,55 @@
+---
+# Bake-time (offline): the attacker's static tooling — git, perl, and nikto (used by the Scan action's
+# NiktoScan). Split out of bake_attacker so it compiles into kali_base. The C2-dependent sandcat download
+# stays online in bake_attacker (it needs the per-experiment caldera_ip:port). Runs as root at compile
+# (no `user` var at bake time); update_cache so the install works off a fresh compile-time apt cache.
+- hosts: "{{ host }}"
+  become: true
+
+  tasks:
+    - name: Switch Kali apt repo http -> https (deploy network 404s cleartext HTTP to the Kali mirrors; https egress works)
+      replace:
+        path: /etc/apt/sources.list
+        regexp: 'http://'
+        replace: 'https://'
+
+    - name: Install git, curl, perl, and nikto's Perl deps (curl needed by start_incalmo's sandcat download; XML::Writer + Net::SSLeay present on full Kali, absent on the minimal base)
+      apt:
+        name:
+          - git
+          - curl
+          - perl
+          - libxml-writer-perl
+          - libnet-ssleay-perl
+        state: present
+        update_cache: true
+
+    - name: Remove broken nikto install if present
+      file:
+        path: /var/lib/nikto
+        state: absent
+
+    - name: Clone nikto from GitHub
+      git:
+        repo: https://github.com/sullo/nikto.git
+        dest: /var/lib/nikto
+        version: main
+
+    - name: Make nikto.pl executable
+      file:
+        path: /var/lib/nikto/program/nikto.pl
+        mode: '0755'
+
+    - name: Point nikto wrapper at correct path
+      copy:
+        dest: /usr/bin/nikto
+        mode: '0755'
+        content: |
+          #!/usr/bin/env sh
+          set -e
+          exec /var/lib/nikto/program/nikto.pl "$@"
+
+    - name: Verify nikto is functional
+      command: nikto -Version
+      register: nikto_version
+      failed_when: "'nikto' not in nikto_version.stdout | lower and 'nikto' not in nikto_version.stderr | lower"

@@ -13,6 +13,15 @@
   playbooks: []
   disk_size_gb: null
   location: src/compilation/images/kali.qcow2
+- name: kali_base
+  parent: Kali
+  playbooks:
+  - fix_efi_fstab
+  - enable_root_ssh
+  - enable_host_logging
+  - kali_packages
+  disk_size_gb: null
+  location: src/compilation/images/kali_base.qcow2
 - name: ubuntu_root_ssh
   parent: ubuntu20
   playbooks:

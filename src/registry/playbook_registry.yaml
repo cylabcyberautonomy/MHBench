@@ -72,3 +72,6 @@ start_suricata: src/playbooks/plays/start_suricata.yml
 enable_root_ssh: src/playbooks/plays/enable_root_ssh.yml
 install_ghosts_lite_nostart: src/playbooks/plays/install_ghosts_lite_nostart.yml
 start_ghosts_lite: src/playbooks/plays/start_ghosts_lite.yml
+fix_efi_fstab: src/playbooks/plays/fix_efi_fstab.yml
+bake_attacker_tools: src/playbooks/plays/bake_attacker_tools.yml
+start_incalmo: src/playbooks/plays/start_incalmo.yml

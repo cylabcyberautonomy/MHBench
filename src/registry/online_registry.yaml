@@ -98,10 +98,16 @@
   - start_filebeat
   location: null
 
+# - name: kali_running
+#   parent: kali_base
+#   playbooks:
+#   - bake_attacker_tools
+#   - bake_attacker
+#   - start_attacker
+#   location: null
+
 - name: kali_running
-  parent: Kali
+  parent: kali_base
   playbooks:
-  - enable_root_ssh
-  - bake_attacker
-  - start_attacker
+  - start_incalmo
   location: null
