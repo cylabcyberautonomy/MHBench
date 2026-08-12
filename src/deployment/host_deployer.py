@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
+import os
+import subprocess
+import tempfile
 import time
 
 from openstack.connection import Connection
@@ -19,6 +24,8 @@ _DEPLOY_TIMEOUT = 1200  # 20 min. The m2.large attacker's 7.2GB Kali image is pu
 _DELETE_TIMEOUT = 300
 _POLL_INTERVAL = 5
 _VM_CREATE_RETRIES = 3  # per-VM recreate attempts on ERROR (NoValidHost during a packing burst) — retry the VM, not the env
+_FIP_RECYCLE_ATTEMPTS = 3
+_CONSOLE_KEY_TIMEOUT = 120
 
 
 class HostDeployer:
@@ -126,6 +133,7 @@ class HostDeployer:
             self._conn.network.update_ip(fip.id, port_id=port.id)
             mgmt_floating_ip = fip.floating_ip_address
             logger.info("Assigned floating IP %s to management_host", mgmt_floating_ip)
+            mgmt_floating_ip = self._verify_and_recycle_fip(server, port, ext_net, fip, mgmt_floating_ip)
 
         all_hosts = topology.get_all_hosts()
         # Create the biggest hosts first — above all the m2.large attacker, which needs the most scheduling/RAM
@@ -220,6 +228,66 @@ class HostDeployer:
                     pending[new_id] = val
 
         return mgmt_floating_ip
+
+    def _console_host_key(self, server) -> str | None:
+        deadline = time.monotonic() + _CONSOLE_KEY_TIMEOUT
+        while time.monotonic() < deadline:
+            try:
+                out = self._conn.compute.get_server_console_output(server)
+                text = out.get("output", "") if isinstance(out, dict) else str(out)
+            except Exception:
+                text = ""
+            for line in text.splitlines():
+                if "(ED25519)" in line and "SHA256:" in line:
+                    return "SHA256:" + line.split("SHA256:")[1].split()[0]
+            time.sleep(_POLL_INTERVAL)
+        return None
+
+    def _fip_host_key(self, fip_addr: str) -> str | None:
+        for _ in range(3):
+            fd, khf = tempfile.mkstemp()
+            os.close(fd)
+            try:
+                subprocess.run(
+                    ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
+                     "-o", f"UserKnownHostsFile={khf}", "-o", "ConnectTimeout=8",
+                     f"root@{fip_addr}", "true"],
+                    capture_output=True, timeout=25)
+                for line in open(khf):
+                    parts = line.split()
+                    if len(parts) >= 3 and parts[1] == "ssh-ed25519":
+                        digest = hashlib.sha256(base64.b64decode(parts[2])).digest()
+                        return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
+            except Exception:
+                pass
+            finally:
+                try:
+                    os.remove(khf)
+                except OSError:
+                    pass
+            time.sleep(_POLL_INTERVAL)
+        return None
+
+    def _verify_and_recycle_fip(self, server, port, ext_net, fip, mgmt_floating_ip: str) -> str:
+        true_fp = self._console_host_key(server)
+        if not true_fp:
+            logger.warning("Could not read mgmt host key from console; skipping stale-FIP check for %s", mgmt_floating_ip)
+            return mgmt_floating_ip
+        for attempt in range(1, _FIP_RECYCLE_ATTEMPTS + 1):
+            if self._fip_host_key(mgmt_floating_ip) == true_fp:
+                return mgmt_floating_ip
+            logger.warning("mgmt FIP %s is stale (host key != %s) — recycling (%d/%d)",
+                           mgmt_floating_ip, true_fp, attempt, _FIP_RECYCLE_ATTEMPTS)
+            self._conn.network.update_ip(fip.id, port_id=None)
+            self._conn.network.delete_ip(fip.id)
+            time.sleep(1)
+            fip = self._conn.network.create_ip(floating_network_id=ext_net.id)
+            time.sleep(1)
+            self._conn.network.update_ip(fip.id, port_id=port.id)
+            mgmt_floating_ip = fip.floating_ip_address
+        if self._fip_host_key(mgmt_floating_ip) == true_fp:
+            return mgmt_floating_ip
+        raise RuntimeError(f"mgmt FIP host key never matched after {_FIP_RECYCLE_ATTEMPTS} recycles (last {mgmt_floating_ip})")
 
     def teardown(self, topology: NetworkTopology) -> None:
         if self._management:
