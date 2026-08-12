@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 _MHBENCH_DIR = Path(__file__).resolve().parent.parent.parent
 _CONSOLE_TAIL_LINES = 100
-_PLAYBOOK_RETRIES = 3
-_PLAYBOOK_RETRY_DELAY = 15
+_PLAYBOOK_RETRIES = 5
+_PLAYBOOK_RETRY_DELAY = 20
 _PARALLEL_HOSTS = 8  # max hosts configured concurrently in run_parallel (bounds the single bastion's sshd load)
 _COLLECT_RETRIES = 5       # in-place collect retries (VMs still up); only re-fetches hosts that came back empty
 _COLLECT_RETRY_DELAY = 30  # backoff between collect retries — lets a saturated bastion recover
@@ -138,6 +138,7 @@ class AnsibleRunner:
         ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
+            f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
             f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
             f"-o ControlMaster=auto -o ControlPath={ctl}/bastion-{mgmt_floating_ip} -o ControlPersist=300s "
             f"root@{mgmt_floating_ip}"
@@ -221,6 +222,7 @@ class AnsibleRunner:
         ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
+            f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
             f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
             f"-o ControlMaster=auto -o ControlPath={ctl}/bastion-{mgmt_floating_ip} -o ControlPersist=300s "
             f"root@{mgmt_floating_ip}"
@@ -270,6 +272,49 @@ class AnsibleRunner:
         ansible_log_dir = os.environ.get("MHBENCH_ANSIBLE_LOG_DIR")  # harness points per-host ansible logs here; None -> stdout
         if ansible_log_dir:
             Path(ansible_log_dir).mkdir(parents=True, exist_ok=True)
+
+        # Pre-establish the ONE bastion ControlMaster BEFORE fanning out, so the parallel plays REUSE it instead of
+        # racing to create it. Without this, ControlMaster=auto + N concurrent procs race: the losers hit "ControlSocket
+        # already exists, disabling multiplexing" -> a non-mux fallback that dies as "Connection closed by UNKNOWN port
+        # 65535" -> host UNREACHABLE -> setup_ssh_keys fails (verified by reproduction). An ad-hoc connect to the bastion
+        # opens the master at the same ControlPath the ProxyCommand targets. Best-effort: on failure the plays fall back
+        # to the old on-demand behavior, so this can only help.
+        Path(ctl).mkdir(parents=True, exist_ok=True)
+        # Raise the bastion's MaxStartups (stock 10:30:100 throttles the parallel plays' connection burst -> the
+        # setup_ssh_keys "port 65535" drops) + reload sshd, before the master opens below.
+        with tempfile.TemporaryDirectory() as ms_tmp:
+            ansible_runner.run(
+                private_data_dir=ms_tmp, host_pattern="bastion", module="raw",
+                module_args=(
+                    "sed -i '/^[[:space:]]*MaxStartups/d' /etc/ssh/sshd_config && "
+                    "printf 'MaxStartups 200:30:400\\n' >> /etc/ssh/sshd_config && "
+                    "(systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || service ssh reload)"
+                ),
+                quiet=True, verbosity=self._verbosity,
+                inventory={"all": {"hosts": {"bastion": {
+                    "ansible_host": mgmt_floating_ip, "ansible_user": "root",
+                    "ansible_ssh_private_key_file": self._ssh_key_path,
+                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+                }}}},
+            )
+        with tempfile.TemporaryDirectory() as warm_tmp:
+            warm = ansible_runner.run(
+                private_data_dir=warm_tmp, host_pattern="bastion", module="raw", module_args="true", quiet=True,
+                verbosity=self._verbosity,
+                inventory={"all": {"hosts": {"bastion": {
+                    "ansible_host": mgmt_floating_ip, "ansible_user": "root",
+                    "ansible_ssh_private_key_file": self._ssh_key_path,
+                    "ansible_ssh_common_args": (
+                        f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
+                        f"-o ControlMaster=auto -o ControlPath={ctl}/bastion-{mgmt_floating_ip} -o ControlPersist=300s"
+                    ),
+                }}}},
+            )
+        if warm.status == "successful":
+            logger.info("Bastion ControlMaster pre-warmed at %s", mgmt_floating_ip)
+        else:
+            logger.warning("Bastion ControlMaster pre-warm did not succeed (status=%s); falling back to on-demand.",
+                           warm.status)
 
         def _run_host_chain(host_name: str, chain: list[tuple[str, dict]]) -> None:
             log_path = f"{ansible_log_dir}/{host_name}.log" if ansible_log_dir else None
@@ -355,6 +400,7 @@ class AnsibleRunner:
         ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
+            f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
             f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
             f"-o ControlMaster=auto -o ControlPath={ctl}/bastion-{mgmt_floating_ip} -o ControlPersist=300s "
             f"root@{mgmt_floating_ip}"
@@ -418,6 +464,7 @@ class AnsibleRunner:
         ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
+            f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
             f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
             f"-o ControlMaster=auto -o ControlPath={ctl}/bastion-{mgmt_floating_ip} -o ControlPersist=300s "
             f"root@{mgmt_floating_ip}"
