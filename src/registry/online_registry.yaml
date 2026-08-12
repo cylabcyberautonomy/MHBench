@@ -109,5 +109,4 @@
 - name: kali_running
   parent: kali_base
   playbooks:
-  - start_incalmo
   location: null

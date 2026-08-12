@@ -45,6 +45,8 @@ class AnsibleRunner:
         self._project_name = project_name
         c2c = getattr(config, "c2c", None)
         self._c2c_vars: dict = {"caldera_ip": c2c.ip, "caldera_port": c2c.port} if c2c else {}
+        self._attacker_play = getattr(config, "attacker_play", None)  # overrides the kali host's runtime play (per-attacker)
+        self._attacker_only = getattr(config, "attacker_only", False)  # run ONLY the kali attacker host's play (post-config setup step)
         self._verbosity = getattr(config, "ansible_verbosity", 0)
 
     def _log_console(self, host_name: str) -> None:
@@ -159,7 +161,11 @@ class AnsibleRunner:
 
         queue: list[tuple[str | None, str, dict]] = []
         for host in hosts:
+            if self._attacker_only and host.vm_type != "kali_running":
+                continue
             runtime_pbs = self._online.get_runtime_playbooks(host.vm_type)
+            if self._attacker_play and host.vm_type == "kali_running":
+                runtime_pbs = [self._attacker_play]
             if runtime_pbs:
                 queue.append((host.name, "check_if_host_up", {
                     "manage_ip": mgmt_floating_ip,
@@ -167,8 +173,9 @@ class AnsibleRunner:
                 }))
                 for pb_name in runtime_pbs:
                     queue.append((host.name, pb_name, {"user": "root", **self._c2c_vars}))
-        for pb in topology.playbooks:
-            queue.append((None, pb.name, pb.args))
+        if not self._attacker_only:
+            for pb in topology.playbooks:
+                queue.append((None, pb.name, pb.args))
 
         if not queue:
             logger.info("No playbooks to run.")
@@ -239,13 +246,17 @@ class AnsibleRunner:
         # sequential; only across hosts is it parallel). Topology plays are cross-host and run after, serially.
         per_host: dict[str, list[tuple[str, dict]]] = {}
         for host in hosts:
+            if self._attacker_only and host.vm_type != "kali_running":
+                continue
             runtime_pbs = self._online.get_runtime_playbooks(host.vm_type)
+            if self._attacker_play and host.vm_type == "kali_running":
+                runtime_pbs = [self._attacker_play]
             if runtime_pbs:
                 per_host[host.name] = (
                     [("check_if_host_up", {"manage_ip": mgmt_floating_ip, "ssh_key_path": self._ssh_key_path})]
                     + [(pb_name, {"user": "root", **self._c2c_vars}) for pb_name in runtime_pbs]
                 )
-        topo = [(pb.name, pb.args) for pb in topology.playbooks]
+        topo = [] if self._attacker_only else [(pb.name, pb.args) for pb in topology.playbooks]
 
         if not per_host and not topo:
             logger.info("No playbooks to run.")

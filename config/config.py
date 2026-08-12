@@ -52,6 +52,8 @@ class Config(BaseModel):
     openstack: Optional[OpenStackConfig] = None
     management: Optional[ManagementConfig] = None
     c2c: Optional[C2CConfig] = None
+    attacker_play: Optional[str] = None
+    attacker_only: bool = False
     ansible_verbosity: int = 0
 
     @classmethod

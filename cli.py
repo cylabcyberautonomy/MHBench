@@ -190,8 +190,10 @@ def provision(ctx: click.Context, spec: Path, c2c_url: str | None, project_name:
 @click.option("--mgmt-ip", default=None, help="Management host floating IP (from provisioning)")
 @click.option("--c2c-url", default=None, help="C2C server URL (e.g. http://10.0.0.1:8888); overrides config")
 @click.option("--project-name", default=None, help="Prefix used during provisioning")
+@click.option("--attacker-play", default=None, help="Runtime play to run on the kali attacker host instead of the registry default")
+@click.option("--attacker-only", is_flag=True, help="Run ONLY the kali attacker host's play (skip other hosts + topology plays)")
 @click.pass_context
-def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str | None, project_name: str | None) -> None:
+def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str | None, project_name: str | None, attacker_play: str | None, attacker_only: bool) -> None:
     """Run Ansible playbooks against a provisioned topology.
 
     SPEC is the same environment JSON used to provision.
@@ -212,6 +214,9 @@ def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str 
     if c2c_url:
         parsed = urlparse(c2c_url)
         config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
+    if attacker_play:
+        config.attacker_play = attacker_play
+    config.attacker_only = attacker_only
 
     playbook_registry = PlaybookRegistryService(config)
     conn = build_connection(config.openstack)
