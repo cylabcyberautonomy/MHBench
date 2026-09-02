@@ -243,21 +243,50 @@ class HostDeployer:
             time.sleep(_POLL_INTERVAL)
         return None
 
-    def _fip_host_key(self, fip_addr: str) -> str | None:
+    # Markers in ssh(1) stderr that mean we never reached the SSH server (as
+    # opposed to reaching it and failing auth / seeing a different host key).
+    _UNREACHABLE_MARKERS = (
+        "Connection timed out", "Connection refused", "No route to host",
+        "Operation timed out", "Network is unreachable", "port 22: ",
+    )
+
+    def _probe_fip_host_key(self, fip_addr: str) -> tuple[bool, str | None]:
+        """Probe a floating IP's SSH host key.
+
+        Returns ``(reachable, host_key)``:
+          * ``(True, "SHA256:...")`` — connected and read the host's ed25519 key
+          * ``(True, None)``         — connected but no ed25519 key seen (rare)
+          * ``(False, None)``        — could not establish an SSH connection at
+                                       all (timeout / refused / no route)
+
+        The reachable flag lets the caller tell a *stale NAT mapping* (a
+        reachable IP pointing at the wrong VM — fixable by recycling the FIP)
+        apart from a genuine *reachability* problem (route / security group /
+        missing bastion hop — which recycling cannot fix).
+        """
+        reachable = False
         for _ in range(3):
             fd, khf = tempfile.mkstemp()
             os.close(fd)
             try:
-                subprocess.run(
+                proc = subprocess.run(
                     ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
                      "-o", f"UserKnownHostsFile={khf}", "-o", "ConnectTimeout=8",
                      f"root@{fip_addr}", "true"],
                     capture_output=True, timeout=25)
+                stderr = proc.stderr.decode(errors="replace") if isinstance(proc.stderr, bytes) else (proc.stderr or "")
                 for line in open(khf):
                     parts = line.split()
                     if len(parts) >= 3 and parts[1] == "ssh-ed25519":
                         digest = hashlib.sha256(base64.b64decode(parts[2])).digest()
-                        return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
+                        return True, "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
+                # No ed25519 key parsed. The host key is recorded during the SSH
+                # handshake, before auth — so a non-empty known_hosts file (or an
+                # auth-stage error) means we DID reach the server.
+                if os.path.getsize(khf) > 0 or "Permission denied" in stderr:
+                    reachable = True
+            except subprocess.TimeoutExpired:
+                pass  # unreachable this attempt
             except Exception:
                 pass
             finally:
@@ -266,7 +295,7 @@ class HostDeployer:
                 except OSError:
                     pass
             time.sleep(_POLL_INTERVAL)
-        return None
+        return reachable, None
 
     def _verify_and_recycle_fip(self, server, port, ext_net, fip, mgmt_floating_ip: str) -> str:
         true_fp = self._console_host_key(server)
@@ -274,10 +303,24 @@ class HostDeployer:
             logger.warning("Could not read mgmt host key from console; skipping stale-FIP check for %s", mgmt_floating_ip)
             return mgmt_floating_ip
         for attempt in range(1, _FIP_RECYCLE_ATTEMPTS + 1):
-            if self._fip_host_key(mgmt_floating_ip) == true_fp:
+            reachable, seen_fp = self._probe_fip_host_key(mgmt_floating_ip)
+            if reachable and seen_fp == true_fp:
                 return mgmt_floating_ip
-            logger.warning("mgmt FIP %s is stale (host key != %s) — recycling (%d/%d)",
-                           mgmt_floating_ip, true_fp, attempt, _FIP_RECYCLE_ATTEMPTS)
+            if not reachable:
+                # Recycling a floating IP only fixes a stale NAT mapping (a
+                # *reachable* IP pointing at the wrong VM). If the IP isn't
+                # reachable on :22 at all, recycling cannot help — fail fast with
+                # an accurate diagnosis instead of burning recycles on a
+                # misleading "host key" error.
+                raise RuntimeError(
+                    f"mgmt FIP {mgmt_floating_ip} is unreachable on port 22: no SSH "
+                    f"connectivity to the floating-IP network. This is a routing / "
+                    f"security-group / bastion problem on the host running MHBench, "
+                    f"not a stale floating IP. Ensure that host can SSH to the "
+                    f"floating-IP network (e.g. via the correct ProxyJump/bastion)."
+                )
+            logger.warning("mgmt FIP %s is stale (reachable but host key %s != %s) — recycling (%d/%d)",
+                           mgmt_floating_ip, seen_fp, true_fp, attempt, _FIP_RECYCLE_ATTEMPTS)
             self._conn.network.update_ip(fip.id, port_id=None)
             self._conn.network.delete_ip(fip.id)
             time.sleep(1)
@@ -285,7 +328,8 @@ class HostDeployer:
             time.sleep(1)
             self._conn.network.update_ip(fip.id, port_id=port.id)
             mgmt_floating_ip = fip.floating_ip_address
-        if self._fip_host_key(mgmt_floating_ip) == true_fp:
+        reachable, seen_fp = self._probe_fip_host_key(mgmt_floating_ip)
+        if reachable and seen_fp == true_fp:
             return mgmt_floating_ip
         raise RuntimeError(f"mgmt FIP host key never matched after {_FIP_RECYCLE_ATTEMPTS} recycles (last {mgmt_floating_ip})")
 
