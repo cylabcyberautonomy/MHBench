@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import sys
@@ -49,6 +50,21 @@ class AnsibleRunner:
         self._attacker_only = getattr(config, "attacker_only", False)  # run ONLY the kali attacker host's play (post-config setup step)
         self._verbosity = getattr(config, "ansible_verbosity", 0)
 
+    def _ssh_ctl_dir(self) -> str:
+        """Per-experiment SSH ControlPath directory, namespaced by project (see the callers'
+        own comments on why: isolating concurrent runs that reuse the same internal IPs).
+        Hashed rather than the raw project name: AF_UNIX socket paths cap out at 108 bytes,
+        and OpenSSH appends its own ~17-byte suffix (". " + 16 random chars) when atomically
+        creating the control socket on top of the 40-char %C hash / "bastion-<ip>" filename -
+        so a project name longer than about two dozen characters can silently break every SSH
+        connection for that experiment ("ControlPath too long" / "too long for Unix domain
+        socket"). A short fixed-length hash keeps this well under the limit regardless of how
+        the experiment is named."""
+        if not self._project_name:
+            return "/tmp/mhbench-ssh/default"
+        digest = hashlib.sha1(self._project_name.encode()).hexdigest()[:10]
+        return f"/tmp/mhbench-ssh/{digest}"
+
     def _log_console(self, host_name: str) -> None:
         if not self._conn:
             return
@@ -71,7 +87,7 @@ class AnsibleRunner:
         # experiments (identical internal IPs 192.168.200.x reached via different bastions) would otherwise
         # share one mux socket and configure each other's hosts. Namespacing by project isolates runs while
         # keeping the intra-run per-host connection reuse.
-        ssh_ctl_dir = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
+        ssh_ctl_dir = self._ssh_ctl_dir()
         Path(ssh_ctl_dir).mkdir(parents=True, exist_ok=True)
         logf = open(log_path, "a") if log_path else None  # route this play's ansible trace to a per-host file, off shared stdout
         def _stream(event: dict) -> bool:
@@ -135,7 +151,7 @@ class AnsibleRunner:
         # parallel-configure burst can't trip its default MaxStartups (10) and drop the attacker. Per-experiment
         # socket keyed on the bastion IP + namespaced per-project (same dir as the outer per-target mux) so
         # concurrent runs — same internal IPs, different bastions — never share a socket.
-        ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
+        ctl = self._ssh_ctl_dir()
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
             f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
@@ -219,7 +235,7 @@ class AnsibleRunner:
         # parallel-configure burst can't trip its default MaxStartups (10) and drop the attacker. Per-experiment
         # socket keyed on the bastion IP + namespaced per-project (same dir as the outer per-target mux) so
         # concurrent runs — same internal IPs, different bastions — never share a socket.
-        ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
+        ctl = self._ssh_ctl_dir()
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
             f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
@@ -397,7 +413,7 @@ class AnsibleRunner:
         # parallel-configure burst can't trip its default MaxStartups (10) and drop the attacker. Per-experiment
         # socket keyed on the bastion IP + namespaced per-project (same dir as the outer per-target mux) so
         # concurrent runs — same internal IPs, different bastions — never share a socket.
-        ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
+        ctl = self._ssh_ctl_dir()
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
             f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
@@ -461,7 +477,7 @@ class AnsibleRunner:
         # parallel-configure burst can't trip its default MaxStartups (10) and drop the attacker. Per-experiment
         # socket keyed on the bastion IP + namespaced per-project (same dir as the outer per-target mux) so
         # concurrent runs — same internal IPs, different bastions — never share a socket.
-        ctl = f"/tmp/mhbench-ssh/{self._project_name or 'default'}"
+        ctl = self._ssh_ctl_dir()
         proxy = (
             f"ssh -W %h:%p -i {self._ssh_key_path} "
             f"-o BatchMode=yes -o PasswordAuthentication=no "  # fail fast if bastion key-auth fails -> no password-prompt hang
