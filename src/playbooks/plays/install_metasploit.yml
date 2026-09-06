@@ -1,0 +1,55 @@
+---
+# Online (deploy-time): install and start Metasploit's RPC daemon on the attacker
+# host, for Incalmo's LLM-driven lateral-movement path (LLMLateralMoveMetasploit,
+# see msf_rpc_client.py in Incalmo's own repo). msfrpcd binds 127.0.0.1 by
+# design - the code that drives it is dispatched to run on THIS host via the
+# sandcat/Caldera agent specifically so that "127.0.0.1" is correct (this host
+# has no floating IP, so nothing off-host can reach it directly - only its own
+# outbound beacon to the C2 works, matching how nmap/ExploitStruts already run
+# here rather than from the harness host). Not baked into the image offline
+# (unlike bake_attacker_tools.yml's git/perl/nikto) since only the LLM
+# abstraction needs it and metasploit-framework is a large, slow install -
+# baking it in would cost every experiment that download regardless of whether
+# it's ever used.
+- hosts: "{{ host }}"
+  become: true
+  become_user: '{{ user }}'
+
+  tasks:
+    - name: Install Metasploit Framework (Kali's own repo carries it natively)
+      apt:
+        name: metasploit-framework
+        state: present
+        update_cache: true
+
+    - name: Install pymetasploit3 (msf_rpc_client.py's RPC client library)
+      # extra_args (not the newer break_system_packages param - unsupported by this control
+      # host's ansible.builtin.pip) to get past Kali's PEP 668 externally-managed-environment
+      # guard on its system pip.
+      pip:
+        name: pymetasploit3
+        extra_args: --break-system-packages
+
+    - name: Kill any existing msfrpcd process
+      shell: pkill -f '[m]sfrpcd' || true
+      changed_when: false
+
+    - name: Start msfrpcd
+      # Matches msf_rpc_client.py's _client(): password "password", default port
+      # 55553, ssl on (msfrpcd's own default - no -S/--no-ssl flag passed).
+      shell: "nohup msfrpcd -P password &>/tmp/msfrpcd.log &"
+      args:
+        executable: /bin/bash
+
+    - name: Wait for msfrpcd to be listening
+      wait_for:
+        host: 127.0.0.1
+        port: 55553
+        timeout: 90
+        state: started
+
+    - name: Verify msfrpcd process is running
+      shell: pgrep -f '[m]sfrpcd'
+      register: pgrep_result
+      failed_when: pgrep_result.rc != 0
+      changed_when: false
