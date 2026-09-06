@@ -408,6 +408,12 @@ class AnsibleRunner:
         for host in hosts:
             if host.ip_address is None:
                 raise RuntimeError(f"Host '{host.name}' has no ip_address; cannot build ansible inventory.")
+            # ansible.builtin.copy (the auditctl-dump task) does NOT create its destination
+            # directory the way ansible.builtin.fetch does further down in the same play — on any
+            # host where auditctl actually succeeds (rc == 0, so that task's `when` is true rather
+            # than cleanly skipping) it fails outright with "Destination directory ... does not
+            # exist", since nothing else in this call chain ever creates <dest>/<host>/.
+            Path(dest, host.name).mkdir(parents=True, exist_ok=True)
 
         # bastion-hop mux: all hosts share ONE ssh connection to the bastion (separate -W channels) so the
         # parallel-configure burst can't trip its default MaxStartups (10) and drop the attacker. Per-experiment
