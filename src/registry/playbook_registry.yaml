@@ -75,3 +75,4 @@ start_ghosts_lite: src/playbooks/plays/start_ghosts_lite.yml
 fix_efi_fstab: src/playbooks/plays/fix_efi_fstab.yml
 bake_attacker_tools: src/playbooks/plays/bake_attacker_tools.yml
 start_incalmo: src/playbooks/plays/start_incalmo.yml
+install_metasploit: src/playbooks/plays/install_metasploit.yml
