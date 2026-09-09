@@ -4,7 +4,7 @@
   location: null
 
 - name: ubuntu_base_instrumented
-  parent: ubuntu_base
+  parent: ubuntu_telemetry
   playbooks:
   - start_sysflow
   - start_defender_services
@@ -17,16 +17,40 @@
   - netcat_shell
   location: null
 
+- name: ubuntu_netcat_instrumented
+  parent: ubuntu_telemetry
+  playbooks:
+  - netcat_shell
+  - start_sysflow
+  - start_defender_services
+  location: null
+
 - name: ubuntu_writeable_running
   parent: ubuntu_base
   playbooks:
   - writeable_passwd
   location: null
 
+- name: ubuntu_writeable_instrumented
+  parent: ubuntu_telemetry
+  playbooks:
+  - writeable_passwd
+  - start_sysflow
+  - start_defender_services
+  location: null
+
 - name: ubuntu_sudobaron_running
   parent: ubuntu_base
   playbooks:
   - sudobaron
+  location: null
+
+- name: ubuntu_sudobaron_instrumented
+  parent: ubuntu_telemetry
+  playbooks:
+  - sudobaron
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: ubuntu_netcat_writeable_running
@@ -36,11 +60,29 @@
   - writeable_passwd
   location: null
 
+- name: ubuntu_netcat_writeable_instrumented
+  parent: ubuntu_telemetry
+  playbooks:
+  - netcat_shell
+  - writeable_passwd
+  - start_sysflow
+  - start_defender_services
+  location: null
+
 - name: ubuntu_netcat_sudobaron_running
   parent: ubuntu_base
   playbooks:
   - netcat_shell
   - sudobaron
+  location: null
+
+- name: ubuntu_netcat_sudobaron_instrumented
+  parent: ubuntu_telemetry
+  playbooks:
+  - netcat_shell
+  - sudobaron
+  - start_sysflow
+  - start_defender_services
   location: null
 
 - name: webserver_running
@@ -49,11 +91,10 @@
   location: null
 
 - name: webserver_instrumented
-  parent: webserver
+  parent: webserver_telemetry
   playbooks:
   - start_sysflow
   - start_defender_services
-  - start_ghosts_lite
   location: null
 
 - name: webserver_netcat_running
@@ -62,16 +103,43 @@
   - netcat_shell
   location: null
 
+- name: webserver_netcat_instrumented
+  parent: webserver_telemetry
+  playbooks:
+  - netcat_shell
+  - start_sysflow
+  - start_defender_services
+  - start_ghosts_lite
+  location: null
+
 - name: webserver_writeable_running
   parent: webserver
   playbooks:
   - writeable_passwd
   location: null
 
+- name: webserver_writeable_instrumented
+  parent: webserver_telemetry
+  playbooks:
+  - writeable_passwd
+  - start_sysflow
+  - start_defender_services
+  - start_ghosts_lite
+  location: null
+
 - name: webserver_sudobaron_running
   parent: webserver
   playbooks:
   - sudobaron
+  location: null
+
+- name: webserver_sudobaron_instrumented
+  parent: webserver_telemetry
+  playbooks:
+  - sudobaron
+  - start_sysflow
+  - start_defender_services
+  - start_ghosts_lite
   location: null
 
 - name: webserver_netcat_writeable_running
@@ -81,11 +149,31 @@
   - writeable_passwd
   location: null
 
+- name: webserver_netcat_writeable_instrumented
+  parent: webserver_telemetry
+  playbooks:
+  - netcat_shell
+  - writeable_passwd
+  - start_sysflow
+  - start_defender_services
+  - start_ghosts_lite
+  location: null
+
 - name: webserver_netcat_sudobaron_running
   parent: webserver
   playbooks:
   - netcat_shell
   - sudobaron
+  location: null
+
+- name: webserver_netcat_sudobaron_instrumented
+  parent: webserver_telemetry
+  playbooks:
+  - netcat_shell
+  - sudobaron
+  - start_sysflow
+  - start_defender_services
+  - start_ghosts_lite
   location: null
 
 - name: sensor_instrumented

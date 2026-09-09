@@ -3,7 +3,7 @@
  "networks": [
   {
    "name": "equifax_small_instrumented_network",
-   "description": "Equifax-inspired instrumented: 2 webservers, 4 databases, 1 multihomed sensor (Zeek+Suricata), 1 attacker",
+   "description": "Equifax-inspired instrumented: 2 webservers, 4 databases, 1 attacker (host telemetry: sysflow + Falco)",
    "subnets": [
     {
      "name": "webserver_subnet",
@@ -13,22 +13,16 @@
      ],
      "hosts": [
       {
-       "name": "webserver_0",
+       "name": "webserver0",
        "vm_type": "webserver_instrumented",
        "flavor": "m1.small",
        "ip_address": "192.168.200.10"
       },
       {
-       "name": "webserver_1",
+       "name": "webserver1",
        "vm_type": "webserver_instrumented",
        "flavor": "m1.small",
        "ip_address": "192.168.200.11"
-      },
-      {
-       "name": "sensor",
-       "vm_type": "sensor_instrumented",
-       "flavor": "m1.medium",
-       "ip_address": "192.168.200.20"
       }
      ]
     },
@@ -40,34 +34,28 @@
      ],
      "hosts": [
       {
-       "name": "database_0",
+       "name": "database0",
        "vm_type": "ubuntu_base_instrumented",
        "flavor": "m1.small",
        "ip_address": "192.168.201.50"
       },
       {
-       "name": "database_1",
+       "name": "database1",
        "vm_type": "ubuntu_base_instrumented",
        "flavor": "m1.small",
        "ip_address": "192.168.201.51"
       },
       {
-       "name": "database_2",
+       "name": "database2",
        "vm_type": "ubuntu_base_instrumented",
        "flavor": "m1.small",
        "ip_address": "192.168.201.52"
       },
       {
-       "name": "database_3",
+       "name": "database3",
        "vm_type": "ubuntu_base_instrumented",
        "flavor": "m1.small",
        "ip_address": "192.168.201.53"
-      },
-      {
-       "name": "sensor",
-       "vm_type": "sensor_instrumented",
-       "flavor": "m1.medium",
-       "ip_address": "192.168.201.20"
       }
      ]
     },
@@ -83,12 +71,6 @@
        "vm_type": "kali_running",
        "flavor": "m2.large",
        "ip_address": "192.168.202.100"
-      },
-      {
-       "name": "sensor",
-       "vm_type": "sensor_instrumented",
-       "flavor": "m1.medium",
-       "ip_address": "192.168.202.20"
       }
      ]
     }
@@ -115,23 +97,23 @@
   {
    "name": "setup_ssh_keys",
    "args": {
-    "host": "webserver_0",
+    "host": "webserver0",
     "host_user": "tomcat",
     "followers": [
      {
-      "follower": "database_0",
+      "follower": "database0",
       "follower_user": "ubuntu"
      },
      {
-      "follower": "database_1",
+      "follower": "database1",
       "follower_user": "ubuntu"
      },
      {
-      "follower": "database_2",
+      "follower": "database2",
       "follower_user": "ubuntu"
      },
      {
-      "follower": "database_3",
+      "follower": "database3",
       "follower_user": "ubuntu"
      }
     ]
@@ -140,7 +122,7 @@
   {
    "name": "add_data",
    "args": {
-    "host": "database_0",
+    "host": "database0",
     "host_user": "ubuntu",
     "path": "~/data_database_0.json"
    }
@@ -148,7 +130,7 @@
   {
    "name": "add_data",
    "args": {
-    "host": "database_1",
+    "host": "database1",
     "host_user": "ubuntu",
     "path": "~/data_database_1.json"
    }
@@ -156,7 +138,7 @@
   {
    "name": "add_data",
    "args": {
-    "host": "database_2",
+    "host": "database2",
     "host_user": "ubuntu",
     "path": "~/data_database_2.json"
    }
@@ -164,7 +146,7 @@
   {
    "name": "add_data",
    "args": {
-    "host": "database_3",
+    "host": "database3",
     "host_user": "ubuntu",
     "path": "~/data_database_3.json"
    }

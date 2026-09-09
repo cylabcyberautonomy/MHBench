@@ -5,12 +5,12 @@
   tasks:
     # - name: Download sysflow packages
     #   shell: |
-    #     wget https://github.com/sysflow-telemetry/sf-collector/releases/download/0.5.0/sfcollector-0.5.0-x86_64.deb
+    #     wget https://github.com/sysflow-telemetry/sf-collector/releases/download/0.8.0/sfcollector-0.8.0-x86_64.deb
     #     wget https://github.com/sysflow-telemetry/sf-processor/releases/download/0.5.0/sfprocessor-0.5.0-x86_64.deb
     - name: Copy sysflow collector
       ansible.builtin.copy:
-        src: "aux_files/sfcollector-0.5.0-x86_64.deb"
-        dest: "/root/sfcollector-0.5.0-x86_64.deb"
+        src: "aux_files/sfcollector-0.8.0-x86_64.deb"
+        dest: "/root/sfcollector-0.8.0-x86_64.deb"
 
     - name: Copy sysflow processor
       ansible.builtin.copy:
@@ -24,10 +24,41 @@
           - llvm
           - linux-headers-generic
 
+    # --force-overwrite: sfcollector 0.8.0 ships /etc/falco/falco.yaml, which the standalone
+    # falco package (already present in ubuntu_base) also owns. Safe here because
+    # install_falco_nostart runs AFTER this play and copies aux_files/falco.yaml over the
+    # top, so the modern_ebpf engine config is what survives.
     - name: Install sysflow
-      command: "dpkg -i /root/sfcollector-0.5.0-x86_64.deb /root/sfprocessor-0.5.0-x86_64.deb"
+      command: "dpkg -i --force-overwrite /root/sfcollector-0.8.0-x86_64.deb /root/sfprocessor-0.5.0-x86_64.deb"
 
     - name: Copy config
       ansible.builtin.copy:
         src: "aux_files/pipeline.local.json"
         dest: "/etc/sysflow/pipelines/pipeline.local.json"
+    - name: Ensure collector systemd drop-in dir exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/sysflow-collector.service.d
+        state: directory
+        mode: "0755"
+
+    # The package ships DRIVER_TYPE=ebpf (the legacy probe, compiled at runtime against
+    # kernel headers — impossible on 6.3+ since kernel_cap_t became a u64). ebpf-core
+    # selects the CO-RE driver, which needs no compilation. This also makes the launcher
+    # pass "-k ebpf-core" through to sysporter, which otherwise looks for falco-bpf.o.
+    - name: Select the CO-RE eBPF driver
+      ansible.builtin.lineinfile:
+        path: /etc/sysflow/conf/sysflow.env
+        regexp: '^DRIVER_TYPE='
+        line: 'DRIVER_TYPE=ebpf-core'
+
+    # The 0.8.0 unit sets ProtectSystem=full, mounting /etc read-only for the service, but
+    # falcoctl (run from ExecStart) must persist driver config to /etc/falco/config.d and
+    # /etc/falcoctl/falcoctl.yaml. Without this the collector exits 1 in a restart loop.
+    - name: Allow falcoctl to persist driver config under ProtectSystem=full
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/sysflow-collector.service.d/10-falcoctl-writable.conf
+        mode: "0644"
+        content: |
+          [Service]
+          ReadWritePaths=/etc/falco /etc/falcoctl
+
