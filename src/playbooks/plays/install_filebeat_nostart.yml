@@ -4,9 +4,9 @@
   become: yes
 
   vars:
-    es_address: "https://10.81.1.25:9200"
+    es_address: "http://10.81.1.25:9200"
     es_user: "elastic"
-    es_password: "-97z1wUJcnE_Y31SuYg-"
+    es_password: "changeme"
 
   tasks:
     - name: Add Elastic GPG key

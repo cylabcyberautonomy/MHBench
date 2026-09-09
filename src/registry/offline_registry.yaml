@@ -41,8 +41,22 @@
   - setup_struts
   disk_size_gb: null
   location: src/compilation/images/webserver.qcow2
-- name: sensor
+- name: ubuntu_telemetry
   parent: ubuntu_base
+  playbooks:
+  - install_sysflow_nostart
+  - install_falco_nostart
+  disk_size_gb: 16
+  location: src/compilation/images/ubuntu_telemetry.qcow2
+- name: webserver_telemetry
+  parent: webserver
+  playbooks:
+  - install_sysflow_nostart
+  - install_falco_nostart
+  disk_size_gb: 16
+  location: src/compilation/images/webserver_telemetry.qcow2
+- name: sensor
+  parent: ubuntu_telemetry
   playbooks:
   - install_zeek_nostart
   - install_suricata_nostart

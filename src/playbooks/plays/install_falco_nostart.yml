@@ -8,9 +8,9 @@
     # ---- Editable vars -------------------------------------------------
     falco_version: ""               # blank = latest from repo
     falcosidekick_version: "2.31.1" # pin if you like; blank = latest
-    es_address: "https://10.81.1.25:9200"
+    es_address: "http://10.81.1.25:9200"
     es_user: "elastic"
-    es_password: "-97z1wUJcnE_Y31SuYg-"
+    es_password: "changeme"
     es_index: "falco"
     # -------------------------------------------------------------------
 
@@ -121,3 +121,22 @@
 
         [Install]
         WantedBy=multi-user.target
+
+  # The falco deb enables its unit via systemd preset on install, so "nostart" does not
+  # hold on its own — bake-time activity would land in the image. Mirrors the explicit
+  # disable that install_zeek_nostart / install_suricata_nostart already do.
+  # engine.kind is modern_ebpf (aux_files/falco.yaml), hence falco-modern-bpf; the other
+  # unit names are listed so this holds if the engine is switched.
+  - name: Ensure Falco does not start on boot
+    systemd:
+      name: "{{ item }}"
+      enabled: no
+      state: stopped
+      daemon_reload: yes
+    loop:
+      - falco-modern-bpf
+      - falco-bpf
+      - falco-kmod
+      - falco
+      - falcosidekick
+    ignore_errors: yes

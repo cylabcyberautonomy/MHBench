@@ -21,9 +21,14 @@
       command: sysflow start
       ignore_errors: yes
 
+    # The falco deb ships no plain `falco.service` — the unit is named after the driver
+    # (falco-modern-bpf / falco-bpf / falco-kmod). aux_files/falco.yaml sets
+    # engine.kind: modern_ebpf, so this is the matching unit. Using `falco` here fails
+    # with "Could not find the requested service falco" and, with no ignore_errors,
+    # takes the whole configure step down with it.
     - name: Enable and start falco
       systemd:
-        name: falco
+        name: falco-modern-bpf
         state: started
         enabled: yes
         daemon_reload: yes
