@@ -1,0 +1,36 @@
+# Local Falco rule overrides for MHBench instrumented environments.
+#
+# Loaded via rules_files in aux_files/falco.yaml (/etc/falco/falco_rules.local.yaml).
+# Copied onto each host at scenario-start by start_defender_services.yml, BEFORE
+# Falco is started, so edits here take effect on the next run with NO rebake of
+# the base image.
+
+# --- 1. Silence the harness's own Ansible control plane ----------------------
+# Provisioning, arming, and in-scenario defender actions (e.g. RestoreServer)
+# drive hosts over SSH with Ansible, which spawns `/bin/sh -c` shells and reads
+# system files. Those are "setup" activity, not the attacker, but they trip the
+# process rules. Match Ansible's own fingerprints (BECOME token, AnsiballZ module
+# wrapper, interpreter discovery) - an attacker has no reason to emit these - and
+# exclude them. Content-based, so it also covers Ansible that runs mid-scenario.
+- macro: harness_ansible
+  condition: >
+    (proc.cmdline contains "BECOME-SUCCESS-"
+     or proc.pcmdline contains "BECOME-SUCCESS-"
+     or proc.cmdline contains "AnsiballZ_"
+     or proc.pcmdline contains "AnsiballZ_"
+     or proc.cmdline contains "echo PLATFORM")
+
+- rule: Run shell untrusted
+  override:
+    condition: append
+  condition: and not harness_ansible
+
+- rule: Read sensitive file untrusted
+  override:
+    condition: append
+  condition: and not harness_ansible
+
+# NOTE: Detection is left STOCK. The Tomcat spawner clause stays disabled
+# (never_true) as upstream ships it, so Tomcat->shell (Struts RCE) is not
+# detected here - matching a default Falco deployment. This file only silences
+# the harness's own Ansible control plane; it does not add detection coverage.
