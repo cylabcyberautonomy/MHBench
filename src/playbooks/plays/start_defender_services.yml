@@ -21,6 +21,18 @@
       command: sysflow start
       ignore_errors: yes
 
+    # Local rule overrides, copied at start time (NOT baked) so edits take effect
+    # on the next run without rebuilding the image. Must land before Falco starts
+    # below so it is loaded on first start. aux_files/falco.yaml already lists
+    # /etc/falco/falco_rules.local.yaml in rules_files.
+    - name: Install Falco local rule overrides (harness/Ansible allowlist + Tomcat RCE)
+      ansible.builtin.copy:
+        src: aux_files/falco_rules.local.yaml
+        dest: /etc/falco/falco_rules.local.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
     # The falco deb ships no plain `falco.service` — the unit is named after the driver
     # (falco-modern-bpf / falco-bpf / falco-kmod). aux_files/falco.yaml sets
     # engine.kind: modern_ebpf, so this is the matching unit. Using `falco` here fails
