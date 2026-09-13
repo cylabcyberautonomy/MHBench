@@ -8,6 +8,7 @@
   playbooks:
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   location: null
 
 
@@ -23,6 +24,7 @@
   - netcat_shell
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   location: null
 
 - name: ubuntu_writeable_running
@@ -37,6 +39,7 @@
   - writeable_passwd
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   location: null
 
 - name: ubuntu_sudobaron_running
@@ -51,6 +54,7 @@
   - sudobaron
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   location: null
 
 - name: ubuntu_netcat_writeable_running
@@ -67,6 +71,7 @@
   - writeable_passwd
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   location: null
 
 - name: ubuntu_netcat_sudobaron_running
@@ -83,6 +88,7 @@
   - sudobaron
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   location: null
 
 - name: webserver_running
@@ -95,6 +101,7 @@
   playbooks:
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   location: null
 
 - name: webserver_netcat_running
@@ -109,6 +116,7 @@
   - netcat_shell
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   - start_ghosts_lite
   location: null
 
@@ -124,6 +132,7 @@
   - writeable_passwd
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   - start_ghosts_lite
   location: null
 
@@ -139,6 +148,7 @@
   - sudobaron
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   - start_ghosts_lite
   location: null
 
@@ -156,6 +166,7 @@
   - writeable_passwd
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   - start_ghosts_lite
   location: null
 
@@ -173,6 +184,7 @@
   - sudobaron
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   - start_ghosts_lite
   location: null
 
@@ -181,6 +193,7 @@
   playbooks:
   - start_sysflow
   - start_defender_services
+  - install_auditd_offline
   - start_zeek
   - start_suricata
   - start_filebeat
