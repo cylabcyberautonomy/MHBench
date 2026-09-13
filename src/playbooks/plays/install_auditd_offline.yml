@@ -1,0 +1,52 @@
+---
+# Deploy-time (online-registry, runtime) auditd install for instrumented hosts, via vendored .deb +
+# dpkg — the same offline-install pattern install_sysflow uses. Runs live on the already-booted VM
+# during configure; it does NOT modify the image (no rebake).
+#
+# WHY dpkg and not apt: the instrumented telemetry images ship without auditd, and the deployed victim
+# network can't apt-install it — the Ubuntu/cloud mirrors return "does not have a Release file" from
+# inside the range. dpkg installs a local .deb with no repo/network, so the broken mirror is never
+# consulted. We ship auditd + its audit-specific libs in aux_files; libc6/mawk/libcap-ng0/
+# init-system-helpers are already on the base image. Validated: 7/7 hosts collected /var/log/audit.
+#
+# TODO (durable fix): bake auditd into the telemetry images at compile time — add enable_host_logging
+# to ubuntu_telemetry / webserver_telemetry in offline_registry.yaml and recompile, the same way
+# ubuntu_base already ships auditd. This runtime play is the fast path that needs no image rebuild.
+- hosts: "{{ host }}"
+  remote_user: root
+  become: true
+  tasks:
+    - name: Copy vendored auditd packages
+      ansible.builtin.copy:
+        src: "aux_files/{{ item }}"
+        dest: "/root/{{ item }}"
+      loop:
+        - libaudit1.deb
+        - libauparse0t64.deb
+        - auditd.deb
+
+    - name: Install auditd from the vendored debs (dpkg — no apt mirror)
+      ansible.builtin.command: >
+        dpkg -i --force-confold
+        /root/libaudit1.deb /root/libauparse0t64.deb /root/auditd.deb
+      register: _auditd_dpkg
+      changed_when: "'already installed' not in _auditd_dpkg.stdout"
+
+    - name: Auditd rules (same Neo23x0 ruleset enable_host_logging bakes)
+      ansible.builtin.copy:
+        src: aux_files/audit.rules
+        dest: /etc/audit/rules.d/ubuntu_logging.rules
+        mode: "0640"
+
+    - name: Auditd retention (keep_logs — never delete a captured record)
+      ansible.builtin.copy:
+        src: aux_files/auditd.conf
+        dest: /etc/audit/auditd.conf
+        mode: "0640"
+
+    - name: Start + enable auditd now
+      ansible.builtin.systemd:
+        name: auditd
+        state: started
+        enabled: true
+        daemon_reload: true
