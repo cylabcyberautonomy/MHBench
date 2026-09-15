@@ -20,6 +20,24 @@
      or proc.pcmdline contains "AnsiballZ_"
      or proc.cmdline contains "echo PLATFORM")
 
+# --- 2. Silence systemd's per-session PAM setup (Ubuntu 24.04 / systemd 255) --
+# systemd >= 254 (Noble ships 255) spawns the per-user session manager through
+# /usr/lib/systemd/systemd-executor, whose PAM session setup reads /etc/pam.d/*
+# and /etc/shadow on EVERY session creation - every cron job and every SSH login
+# (harness Ansible included). That trips "Read sensitive file untrusted" on clean
+# hosts with no attacker present, and confirmed a false positive: in
+# clr_soc_chpe_t1 the SOC restored a host whose only "activity" was these reads,
+# while the attacker was merely port-scanning it (no session, no PAM). On the
+# pre-Noble base image no systemd-executor existed (session setup ran inside the
+# trusted pid-1 systemd), so this never fired - it is an artifact of the OS
+# upgrade, not attacker or harness behavior.
+#
+# Safe to exclude: a real attacker reading /etc/shadow does so from a different
+# binary (cat/less/python/...), which still trips the rule - only systemd's own
+# session-manager reads are silenced.
+- macro: systemd_session_setup
+  condition: proc.exepath = "/usr/lib/systemd/systemd-executor"
+
 - rule: Run shell untrusted
   override:
     condition: append
@@ -28,9 +46,10 @@
 - rule: Read sensitive file untrusted
   override:
     condition: append
-  condition: and not harness_ansible
+  condition: and not harness_ansible and not systemd_session_setup
 
 # NOTE: Detection is left STOCK. The Tomcat spawner clause stays disabled
 # (never_true) as upstream ships it, so Tomcat->shell (Struts RCE) is not
 # detected here - matching a default Falco deployment. This file only silences
-# the harness's own Ansible control plane; it does not add detection coverage.
+# the harness's own Ansible control plane and systemd's per-session PAM setup; it
+# does not add detection coverage.
