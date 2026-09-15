@@ -3,6 +3,8 @@
 # controller — the harness box, which already reaches every host over the bastion ProxyJump.
 # ignore_unreachable: one dead/half-configured host must not cost us the others' logs.
 # Files land flat at <dest>/<host>/<basename> (e.g. <host>/auth.log, <host>/audit.log).
+# Also captures auditctl -l / -s per host (auditctl-rules.txt / auditctl-status.txt) so a
+# missing detection can be attributed to sensor state, not just attacker behavior.
 - hosts: all
   remote_user: root
   gather_facts: false
@@ -28,6 +30,35 @@
         patterns: ['passwd', 'group']
         recurse: false
       register: _idmaps
+
+    # Sensor-integrity capture: the audit.rules ship with `-i` (ignore-errors), so a rule that
+    # fails to load does so SILENTLY. Without these dumps a Sigma non-hit is ambiguous:
+    # "attacker never did X" vs "the rule for X never loaded" vs "the event was dropped".
+    # auditctl -l = which rules are actually loaded; auditctl -s = status incl. the lost-event count.
+    # failed_when: false so a host without auditd/auditctl still yields its logs above.
+    - name: Dump loaded audit rules (auditctl -l)
+      ansible.builtin.command: auditctl -l
+      register: _auditctl_rules
+      changed_when: false
+      failed_when: false
+
+    - name: Dump audit status incl. lost-event count (auditctl -s)
+      ansible.builtin.command: auditctl -s
+      register: _auditctl_status
+      changed_when: false
+      failed_when: false
+
+    - name: Save auditctl dumps to <dest>/<host>/ on the controller
+      ansible.builtin.copy:
+        dest: "{{ dest }}/{{ inventory_hostname }}/{{ item.name }}"
+        content: "{{ item.result.stdout | default('') }}\n"
+      delegate_to: localhost
+      when: item.result.rc is defined and item.result.rc == 0
+      loop:
+        - { name: 'auditctl-rules.txt', result: '{{ _auditctl_rules }}' }
+        - { name: 'auditctl-status.txt', result: '{{ _auditctl_status }}' }
+      loop_control:
+        label: "{{ item.name }}"
 
     - name: Fetch every log file to <dest>/<host>/<basename>
       ansible.builtin.fetch:

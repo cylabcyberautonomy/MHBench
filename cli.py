@@ -332,8 +332,9 @@ def teardown(ctx: click.Context, spec: Path, yes: bool, project_name: str | None
 def collect(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str | None, dest: Path) -> None:
     """Fetch each host's ground-truth logs before teardown.
 
-    SPEC is the same environment JSON used to provision. Pulls auth.log/syslog/auditd/netflow/
-    cmdlog + per-user bash history from every host to <dest>/<host>/ over the bastion ProxyJump.
+    SPEC is the same environment JSON used to provision. Pulls auth.log/syslog, auditd logs,
+    cmdlog, the /etc/passwd + /etc/group id maps, and the auditctl -l / -s dumps (loaded rules +
+    lost-event count) from every host to <dest>/<host>/ over the bastion ProxyJump.
     """
     config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
     online = OnlineRegistryService(config)
