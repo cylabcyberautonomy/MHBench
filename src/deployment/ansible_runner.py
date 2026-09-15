@@ -372,7 +372,9 @@ class AnsibleRunner:
                 for pb_name, args in chain:
                     logger.info("Running playbook '%s' on '%s'", pb_name, host_name)
                     self._run_playbook(pb_name, {"all": {"hosts": inventory_hosts}},
-                                       {"host": host_name, **args}, tmp, project_dir, log_path)
+                                       {"host": host_name, **args,
+                                        "mhb_project": self._project_name},
+                                       tmp, project_dir, log_path)
 
         # Phase 1: per-host online plays, up to _PARALLEL_HOSTS at once. Wait for all, then surface failures.
         with ThreadPoolExecutor(max_workers=_PARALLEL_HOSTS) as pool:
@@ -413,7 +415,15 @@ class AnsibleRunner:
                     log_path = f"{ansible_log_dir}/_topology_{idx}_{pb_name}.log" if ansible_log_dir else None
                     with tempfile.TemporaryDirectory() as tmp:  # own private_data_dir per thread — a shared one clobbers
                         logger.info("Running topology playbook '%s'", pb_name)
-                        self._run_playbook(pb_name, {"all": {"hosts": inventory_hosts}}, args, tmp, project_dir, log_path)
+                        # mhb_project last so a topology arg can never shadow it.
+                        # add_data.yml hashes it into each planted file's flag, and
+                        # add_data is a TOPOLOGY play, so this call site - not the
+                        # serial one in run(), which configure never reaches - is
+                        # the one that decides whether the flag carries the
+                        # experiment name or an empty string.
+                        self._run_playbook(pb_name, {"all": {"hosts": inventory_hosts}},
+                                           {**args, "mhb_project": self._project_name},
+                                           tmp, project_dir, log_path)
                 finally:
                     for lk in reversed(held):
                         lk.release()
