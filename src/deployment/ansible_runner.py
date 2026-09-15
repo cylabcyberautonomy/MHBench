@@ -50,6 +50,28 @@ class AnsibleRunner:
         self._attacker_only = getattr(config, "attacker_only", False)  # run ONLY the kali attacker host's play (post-config setup step)
         self._verbosity = getattr(config, "ansible_verbosity", 0)
 
+    def _reset_stale_masters(self, ssh_ctl_dir: str) -> None:
+        """Unlink every ControlPath socket under ssh_ctl_dir so the next attempt opens fresh
+        connections instead of reusing one that just failed. ControlPersist keeps a master alive
+        across an entire playbook run (intentionally — see _run_playbook's own comment on why),
+        but that means a master that went bad mid-run (e.g. the far end silently dying, or an
+        upstream hop like a bastion glitching) stays in place across the SAME run's retries too:
+        ControlMaster=auto happily hands out a channel on an already-open master without
+        re-verifying it end-to-end, so a task can appear to "succeed" over a half-dead mux with
+        truncated/garbled output instead of a clean connection error - which is exactly the
+        failure shape collect_host_logs hit (finds registering as bare dicts missing 'files',
+        with no ssh-level error at all). Only called between retries, never before the first
+        attempt of a call, so the intra-run connection reuse this dir exists for is undisturbed
+        when nothing has actually gone wrong yet."""
+        try:
+            for sock in Path(ssh_ctl_dir).iterdir():
+                try:
+                    sock.unlink()
+                except OSError:
+                    pass
+        except FileNotFoundError:
+            pass
+
     def _ssh_ctl_dir(self) -> str:
         """Per-experiment SSH ControlPath directory, namespaced by project (see the callers'
         own comments on why: isolating concurrent runs that reuse the same internal IPs).
@@ -132,8 +154,13 @@ class AnsibleRunner:
                         "Playbook '%s' failed (attempt %d/%d, status: %s) — retrying in %ds.\n%s",
                         pb_name, attempt, _PLAYBOOK_RETRIES, result.status, _PLAYBOOK_RETRY_DELAY, stderr,
                     )
+                    self._reset_stale_masters(ssh_ctl_dir)
                     time.sleep(_PLAYBOOK_RETRY_DELAY)
                 else:
+                    # Exhausted our own retries — still reset before surfacing the failure, so a
+                    # caller-level retry (e.g. collect()'s own outer loop) doesn't inherit this
+                    # attempt's dead/half-dead master either.
+                    self._reset_stale_masters(ssh_ctl_dir)
                     raise RuntimeError(
                         f"Playbook '{pb_name}' failed after {_PLAYBOOK_RETRIES} attempts (status: {result.status}).\n{stderr}"
                     )
@@ -203,7 +230,14 @@ class AnsibleRunner:
 
         with tempfile.TemporaryDirectory() as tmp:
             for host_name, pb_name, args in queue:
-                extravars = {"host": host_name, **args} if host_name else args
+                # mhb_project last so a topology arg can never shadow it: add_data.yml
+                # hashes it into each planted file's flag, which is what makes one
+                # host's copy of data.json distinguishable from another's.
+                extravars = (
+                    {"host": host_name, **args, "mhb_project": self._project_name}
+                    if host_name
+                    else {**args, "mhb_project": self._project_name}
+                )
                 if host_name:
                     logger.info("Running playbook '%s' on '%s'", pb_name, host_name)
                 else:

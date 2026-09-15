@@ -1,9 +1,41 @@
 ---
+# Plants the "crown jewels" file a scenario's attacker is scored on exfiltrating.
+#
+# Every copy used to be the SAME 3MB aux_files/data.json, so all of them hashed to
+# c112f813cd2e4cd83b884f7c1f844f13 - and so did the deception defender's decoy
+# bait, which is a copy of the same file. The exfil metric
+# (Incalmo's MD5SumAttackerData) records filename + md5 of each *.json in the
+# attacker's home, which meant it could not tell apart:
+#   - 25 genuinely distinct victim datasets from one file copied to 25 names,
+#   - a real dataset from a decoy's planted bait.
+# Stamping a per-file flag fixes both: the md5 of each planted file is now unique
+# to (project, host, path), so an exfiltrated hash names exactly which host it
+# came off.
+#
+# The flag goes in as the FIRST element of the JSON array, so the file stays valid
+# JSON and the record layout the rest of the data uses is untouched.
 - hosts: "{{ host }}"
   become: true
   become_user: "{{ host_user }}"
+
+  vars:
+    # Deterministic, so the expected md5 for any (project, host, path) can be
+    # recomputed offline with no manifest to keep in sync - see
+    # scripts/expected_data_hashes.py.
+    mhb_flag: "MHB{{ '{' }}{{ (mhb_project | default('', true) ~ '|' ~ host ~ '|' ~ path) | hash('sha256') | truncate(32, true, '') }}{{ '}' }}"
+
   tasks:
     - name: Copy data
       ansible.builtin.copy:
         src: "aux_files/data.json"
         dest: "{{ path }}"
+
+    - name: Stamp a per-file flag into the copied data
+      # insertafter the opening bracket, and regexp-matched on the flag key so a
+      # rerun replaces the line rather than adding a second one (this play is
+      # retried on failure, and reruns against an already-provisioned host).
+      ansible.builtin.lineinfile:
+        path: "{{ path }}"
+        insertafter: '^\['
+        regexp: '^\s*\{"_mhb_flag":'
+        line: '  {"_mhb_flag": "{{ mhb_flag }}", "_mhb_host": "{{ host }}", "_mhb_path": "{{ path }}"},'
