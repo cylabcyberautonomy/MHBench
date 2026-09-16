@@ -70,12 +70,16 @@ class GCPBackend(CloudBackend):
 
         compute = _lazy_compute()
         self._compute = compute
+        # Build credentials once and share them across every client (Compute here, Storage in
+        # upload_image). None -> Application Default Credentials.
+        self._credentials = None
         client_kwargs = {}
         if self._gcp.credentials_file:
             from google.oauth2 import service_account  # lazy
-            client_kwargs["credentials"] = service_account.Credentials.from_service_account_file(
+            self._credentials = service_account.Credentials.from_service_account_file(
                 str(Path(self._gcp.credentials_file).expanduser())
             )
+            client_kwargs["credentials"] = self._credentials
         self._networks = compute.NetworksClient(**client_kwargs)
         self._subnetworks = compute.SubnetworksClient(**client_kwargs)
         self._firewalls = compute.FirewallsClient(**client_kwargs)
@@ -416,7 +420,6 @@ class GCPBackend(CloudBackend):
         ``gcloud compute images import`` does, without the extra Cloud Build step.
         """
         import subprocess
-        import tarfile
         import tempfile
 
         c = self._compute
@@ -451,13 +454,22 @@ class GCPBackend(CloudBackend):
             raw = Path(tmp) / "disk.raw"
             logger.info("Converting %s -> raw...", location)
             subprocess.run(["qemu-img", "convert", "-f", "qcow2", "-O", "raw", location, str(raw)], check=True)
+            # GCP requires disk.raw to be a whole number of GiB; pad (sparse, free) if the image isn't.
+            gib = 1 << 30
+            size = raw.stat().st_size
+            if size % gib:
+                padded = ((size // gib) + 1) * gib
+                logger.info("Padding raw disk %d -> %d bytes (whole GiB)", size, padded)
+                subprocess.run(["qemu-img", "resize", "-f", "raw", str(raw), str(padded)], check=True)
             tar_path = Path(tmp) / f"{img_name}.tar.gz"
             logger.info("Packing %s...", tar_path.name)
-            with tarfile.open(tar_path, "w:gz") as tf:
-                tf.add(raw, arcname="disk.raw")
+            # GCP's importer only accepts the archive gcloud produces: GNU tar, oldgnu format, sparse.
+            # Python's tarfile writes PAX headers by default, which it rejects (INVALID_IMAGE_TAR). Sparse
+            # mode also skips the zero holes, so this is much faster than streaming the full raw size.
+            subprocess.run(["tar", "--format=oldgnu", "-S", "-czf", str(tar_path), "-C", tmp, "disk.raw"], check=True)
 
-            storage_client = (storage.Client.from_service_account_json(self._gcp.credentials_file)
-                              if self._gcp.credentials_file else storage.Client(project=self._project))
+            # Same credentials as the Compute clients (already ~-expanded); None -> ADC.
+            storage_client = storage.Client(project=self._project, credentials=self._credentials)
             bucket = storage_client.bucket(self._gcp.image_bucket)
             blob_name = f"mhbench-images/{img_name}.tar.gz"
             logger.info("Uploading to gs://%s/%s ...", self._gcp.image_bucket, blob_name)
@@ -468,6 +480,12 @@ class GCPBackend(CloudBackend):
                 name=img_name,
                 raw_disk=c.RawDisk(source=f"https://storage.googleapis.com/{self._gcp.image_bucket}/{blob_name}"),
             )))
+            # The image is self-contained once registered; drop the staged tarball so it stops costing storage.
+            try:
+                bucket.blob(blob_name).delete()
+                logger.info("Removed staged gs://%s/%s", self._gcp.image_bucket, blob_name)
+            except Exception:
+                logger.warning("Image registered but could not remove staged gs://%s/%s", self._gcp.image_bucket, blob_name)
         logger.info("Imported image '%s'.", img_name)
 
     def delete_image(self, name: str) -> None:
