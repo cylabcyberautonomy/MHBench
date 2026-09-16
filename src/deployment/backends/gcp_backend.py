@@ -313,6 +313,25 @@ class GCPBackend(CloudBackend):
         if self._gcp.ssh_user != "root":
             ssh_meta += f"\nroot:{pub}"
 
+        # cloud-init's GCE datasource honors metadata `ssh-keys` only for the default
+        # user (ubuntu) and ignores a `root:` entry, but MHBench connects as root. The
+        # OpenStack-built images carry no google-guest-agent, so the only reliable way
+        # to authorize root is cloud-init user-data, which the GCE datasource DOES run.
+        # This also (re)creates the `ubuntu` user the topology plays operate on.
+        user_data = (
+            "#cloud-config\n"
+            "disable_root: false\n"
+            "runcmd:\n"
+            "  - install -d -m700 /root/.ssh\n"
+            f"  - echo '{pub}' >> /root/.ssh/authorized_keys\n"
+            "  - chmod 600 /root/.ssh/authorized_keys\n"
+            "  - id ubuntu >/dev/null 2>&1 || useradd -m -s /bin/bash ubuntu\n"
+            "  - install -d -m700 -o ubuntu -g ubuntu /home/ubuntu/.ssh\n"
+            f"  - echo '{pub}' >> /home/ubuntu/.ssh/authorized_keys\n"
+            "  - chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys\n"
+            "  - chmod 600 /home/ubuntu/.ssh/authorized_keys\n"
+        )
+
         nic = c.NetworkInterface(subnetwork=self._subnet_url(subnet_name))
         if fixed_ip:
             nic.network_i_p = fixed_ip
@@ -333,6 +352,7 @@ class GCPBackend(CloudBackend):
             metadata=c.Metadata(items=[
                 c.Items(key="ssh-keys", value=ssh_meta),
                 c.Items(key="enable-oslogin", value="FALSE"),
+                c.Items(key="user-data", value=user_data),
             ]),
         )
 

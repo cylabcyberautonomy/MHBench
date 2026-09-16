@@ -221,6 +221,12 @@ Notes and current limitations:
   `qemu-img` locally and the `google-cloud-storage` package (included in the
   `gcp` extra). Alternatively import images out of band and point at them with
   `gcp.image_map`.
+- **SSH keys.** GCP delivers keys via instance metadata, but the compiled images
+  carry no google-guest-agent, and cloud-init's GCE datasource only keys the
+  default `ubuntu` user while MHBench connects as `root`. The backend therefore
+  also passes a cloud-init `user-data` that writes the public key into root's
+  (and ubuntu's) `authorized_keys`. Images only need cloud-init, which they
+  already have; no guest agent is required.
 - **DNS.** Per-subnet `dns_servers` in a spec are ignored on GCP; instances use
   GCP's internal resolver.
 - **Guest hostname.** Set to `<host>.mhbench.internal`, keeping `hostname -s`
