@@ -17,9 +17,16 @@ management:
   host_ip: 10.0.1.10
   # Offline-registry image used for the management host
   vm_type: ubuntu_base
-  # OpenStack flavor for the management host
+  # Flavor for the management host (OpenStack flavor name; GCP maps it via
+  # gcp.machine_type_map below)
   flavor: m1.small
 
+# Which cloud provisions the VMs: "openstack" (default) or "gcp".
+backend: openstack
+
+# ---------------------------------------------------------------------------
+# OpenStack backend (used when backend: openstack)
+# ---------------------------------------------------------------------------
 openstack:
   # Path to your OpenStack clouds.yaml file
   clouds_yaml: ~/.config/openstack/clouds.yaml
@@ -31,3 +38,39 @@ openstack:
   ssh_key_path: ~/<your-key>.pem
   # Login user for VMs (typically ubuntu)
   ssh_user: ubuntu
+
+# ---------------------------------------------------------------------------
+# Google Cloud backend (used when backend: gcp). Requires the gcp extra:
+#   uv sync --extra gcp
+# ---------------------------------------------------------------------------
+gcp:
+  # GCP project that owns the VMs, network and images
+  project: my-gcp-project
+  # Region for subnetworks / Cloud NAT, and zone for the VMs
+  region: us-central1
+  zone: us-central1-a
+  # Optional service-account key JSON. Omit to use Application Default
+  # Credentials (GOOGLE_APPLICATION_CREDENTIALS, `gcloud auth`, or the
+  # metadata server).
+  credentials_file: ~/gcp-sa.json
+  # Private key Ansible connects with, and the matching public key injected
+  # into instance metadata (defaults to <ssh_key_path>.pub if unset). MHBench
+  # connects to the compiled images as root.
+  ssh_key_path: ~/.ssh/id_ed25519
+  ssh_public_key_path: ~/.ssh/id_ed25519.pub
+  ssh_user: root
+  # Cloud Storage bucket used to stage disk images during `mhbench upload`.
+  image_bucket: my-mhbench-images
+  # Map OpenStack flavor names (used in specs + management.flavor) to GCP
+  # machine types. Flavors not listed fall back to default_machine_type.
+  default_machine_type: e2-standard-2
+  machine_type_map:
+    m1.small: e2-small
+    m1.medium: e2-medium
+    m2.large: e2-standard-8
+  # Optional: override the GCP image name a compiled image resolves to. By
+  # default a compiled image `ubuntu_base` becomes the GCP image `ubuntu-base`
+  # (RFC1035-sanitized). Values beginning with "family/" resolve against an
+  # image family instead. `image_project` is where images are looked up (self).
+  image_project: my-gcp-project
+  image_map: {}

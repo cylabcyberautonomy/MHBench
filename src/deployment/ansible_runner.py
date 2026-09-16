@@ -11,10 +11,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import ansible_runner
-from openstack.connection import Connection
 
 from config.config import Config
 from src.abstractions.network import NetworkTopology
+from src.deployment.backends.base import CloudBackend
 from src.deployment.online_registry_service import OnlineRegistryService
 from src.playbooks.playbook_registry_service import PlaybookRegistryService
 
@@ -36,13 +36,13 @@ class AnsibleRunner:
         config: Config,
         online_registry: OnlineRegistryService,
         playbook_registry: PlaybookRegistryService,
-        conn: Connection | None = None,
+        backend: CloudBackend | None = None,
         project_name: str | None = None,
     ) -> None:
-        self._ssh_key_path = config.openstack.ssh_key_path
+        self._ssh_key_path = config.ssh_key_path
         self._online = online_registry
         self._playbook_registry = playbook_registry
-        self._conn = conn
+        self._backend = backend
         self._project_name = project_name
         c2c = getattr(config, "c2c", None)
         self._c2c_vars: dict = {"caldera_ip": c2c.ip, "caldera_port": c2c.port} if c2c else {}
@@ -88,19 +88,13 @@ class AnsibleRunner:
         return f"/tmp/mhbench-ssh/{digest}"
 
     def _log_console(self, host_name: str) -> None:
-        if not self._conn:
+        if not self._backend:
             return
         full_name = f"{self._project_name}-{host_name}" if self._project_name else host_name
-        server = self._conn.compute.find_server(full_name)
-        if not server:
-            logger.warning("Could not find server '%s' to fetch console log", full_name)
+        console_text = self._backend.get_console_output(full_name, length=_CONSOLE_TAIL_LINES)
+        if console_text is None:
             return
-        try:
-            output = self._conn.compute.get_server_console_output(server.id, length=_CONSOLE_TAIL_LINES)
-            console_text = output.get("output", "") if isinstance(output, dict) else str(output)
-            logger.info("Console log for %s (last %d lines):\n%s", full_name, _CONSOLE_TAIL_LINES, console_text)
-        except Exception:
-            logger.exception("Failed to fetch console log for '%s'", full_name)
+        logger.info("Console log for %s (last %d lines):\n%s", full_name, _CONSOLE_TAIL_LINES, console_text)
 
     def _run_playbook(self, pb_name: str, inventory: dict, extravars: dict, tmp: str, project_dir: str,
                       log_path: str | None = None) -> None:
@@ -386,7 +380,7 @@ class AnsibleRunner:
                     errors.append((futures[fut], exc))
         if errors:
             for host_name, _ in errors:
-                self._log_console(host_name)  # serial after the pool — avoids concurrent use of self._conn
+                self._log_console(host_name)  # serial after the pool — avoids concurrent use of the backend client
             raise RuntimeError(
                 f"Parallel configure failed on {len(errors)} host(s): "
                 + "; ".join(f"{h}: {e}" for h, e in errors[:5])
