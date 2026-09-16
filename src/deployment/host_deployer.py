@@ -9,6 +9,7 @@ import tempfile
 import time
 
 from openstack.connection import Connection
+from openstack import exceptions as sdk_exceptions
 
 from config.config import Config
 from src.abstractions.network import Host, NetworkTopology
@@ -333,6 +334,23 @@ class HostDeployer:
             return mgmt_floating_ip
         raise RuntimeError(f"mgmt FIP host key never matched after {_FIP_RECYCLE_ATTEMPTS} recycles (last {mgmt_floating_ip})")
 
+    def _delete_server(self, server_id: str, name: str) -> bool:
+        """Delete one server, tolerating one that's already gone. A force delete
+        issues a POST /servers/<id>/action (forceDelete) that returns 404 if the
+        instance already vanished (deleted by a restore, a race, or a prior partial
+        teardown). That NotFound must NOT abort teardown of the *remaining* servers
+        — before this guard a single already-gone instance raised and left the rest
+        (e.g. the Kali VM) leaked, which also inflated the capacity counter. Returns
+        True if a delete was issued (so the caller should wait for it), False if the
+        server was already gone (nothing to wait for)."""
+        try:
+            self._conn.compute.delete_server(server_id, force=True)
+            logger.info("Deleting: %s", name)
+            return True
+        except sdk_exceptions.NotFoundException:
+            logger.info("Already gone, skipping: %s", name)
+            return False
+
     def teardown(self, topology: NetworkTopology) -> None:
         if self._management:
             mgmt_name = self._n("management_host")
@@ -346,16 +364,14 @@ class HostDeployer:
 
         if self._management:
             for server in self._conn.compute.servers(name=self._n("management_host"), project_id=self._project_id):
-                self._conn.compute.delete_server(server.id, force=True)
-                pending[server.id] = self._n("management_host")
-                logger.info("Deleting: %s", self._n("management_host"))
+                if self._delete_server(server.id, self._n("management_host")):
+                    pending[server.id] = self._n("management_host")
 
         for host in topology.get_all_hosts():
             matches = list(self._conn.compute.servers(name=self._n(host.name), project_id=self._project_id))
             for server in matches:
-                self._conn.compute.delete_server(server.id, force=True)
-                pending[server.id] = self._n(host.name)
-                logger.info("Deleting: %s", self._n(host.name))
+                if self._delete_server(server.id, self._n(host.name)):
+                    pending[server.id] = self._n(host.name)
 
         deadline = time.monotonic() + _DELETE_TIMEOUT
         while pending:
