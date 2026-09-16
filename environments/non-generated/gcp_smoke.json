@@ -1,0 +1,27 @@
+{
+ "name": "gcp_smoke",
+ "networks": [
+  {
+   "name": "gcp_smoke_network",
+   "description": "Minimal GCP backend smoke test: mgmt + 2 ubuntu hosts, no attacker/kali (only needs the ubuntu_base image)",
+   "subnets": [
+    {
+     "name": "smoke_subnet",
+     "cidr": "192.168.200.0/24",
+     "dns_servers": ["8.8.8.8"],
+     "hosts": [
+      {"name": "host0", "vm_type": "ubuntu_base_running", "flavor": "m1.small", "ip_address": "192.168.200.10"},
+      {"name": "host1", "vm_type": "ubuntu_base_running", "flavor": "m1.small", "ip_address": "192.168.200.11"}
+     ]
+    }
+   ]
+  }
+ ],
+ "subnet_connections": [],
+ "playbooks": [
+  {"name": "setup_ssh_keys", "args": {"host": "host0", "host_user": "ubuntu",
+     "followers": [{"follower": "host1", "follower_user": "ubuntu"}]}},
+  {"name": "add_data", "args": {"host": "host0", "host_user": "ubuntu", "path": "~/data_host0.json"}},
+  {"name": "add_data", "args": {"host": "host1", "host_user": "ubuntu", "path": "~/data_host1.json"}}
+ ]
+}

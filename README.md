@@ -191,6 +191,27 @@ backends — only `config.yaml` changes.
 Every resource is prefixed with `--project-name` exactly as on OpenStack, so
 concurrent experiments never collide and teardown matches purely by name.
 
+**Quick start.** Run the one-time project setup with
+[scripts/gcp_bootstrap.sh](scripts/gcp_bootstrap.sh), which creates the service
+account, roles, key, and staging bucket idempotently and prints the `gcp:`
+config block to paste:
+
+```bash
+PROJECT_ID=my-mhbench-proj BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX \
+  CREATE_PROJECT=1 ./scripts/gcp_bootstrap.sh
+```
+
+Then compile/upload the `ubuntu_base` image and deploy the tiny
+Ubuntu-only smoke topology
+[environments/non-generated/gcp_smoke.json](environments/non-generated/gcp_smoke.json):
+
+```bash
+uv sync --extra gcp
+mhbench compile ubuntu_base && mhbench upload ubuntu_base
+mhbench deploy environments/non-generated/gcp_smoke.json --project-name gcpsmoke -v
+mhbench teardown environments/non-generated/gcp_smoke.json --project-name gcpsmoke --yes
+```
+
 Notes and current limitations:
 
 - **Images.** Hosts boot from the *compiled* images, so upload them first with
