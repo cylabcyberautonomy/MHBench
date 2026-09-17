@@ -373,37 +373,60 @@ class GCPBackend(CloudBackend):
                 time.sleep(_POLL_INTERVAL)
 
     def provision_hosts(self, topology: NetworkTopology) -> str | None:
-        mgmt_public_ip: str | None = None
-
+        # Build every instance spec up front (management first so we can return its external IP).
+        specs: list[tuple[str, object]] = []
         if self._management:
             mgmt = self._management
-            name = self._n("management-host")
-            logger.info("Creating management host '%s'...", name)
-            instance = self._build_instance(
-                name=name, host_name="management-host", vm_type=mgmt.vm_type, flavor=mgmt.flavor,
+            mname = self._n("management-host")
+            specs.append((mname, self._build_instance(
+                name=mname, host_name="management-host", vm_type=mgmt.vm_type, flavor=mgmt.flavor,
                 subnet_name="management", subnet_tag=self._tag(self._n("management")),
                 fixed_ip=mgmt.host_ip, external=True,
-            )
-            self._create_instance_with_retry(instance)
-            got = self._instances.get(project=self._project, zone=self._zone, instance=name)
-            mgmt_public_ip = got.network_interfaces[0].access_configs[0].nat_i_p
-            logger.info("Management host external IP: %s", mgmt_public_ip)
-
+            )))
         for host in topology.get_all_hosts():
             subnet = topology.get_subnet_for_host(host)
             if not subnet:
                 raise RuntimeError(f"No subnet found for host '{host.name}'.")
-            name = self._n(host.name)
-            logger.info("Creating host '%s' (flavor=%s, vm_type=%s)...", name, host.flavor, host.vm_type)
-            instance = self._build_instance(
-                name=name, host_name=host.name, vm_type=host.vm_type, flavor=host.flavor,
+            hname = self._n(host.name)
+            specs.append((hname, self._build_instance(
+                name=hname, host_name=host.name, vm_type=host.vm_type, flavor=host.flavor,
                 subnet_name=subnet.name, subnet_tag=self._tag(self._n(subnet.name)),
-                fixed_ip=str(host.ip_address) if host.ip_address else None,
-                external=False,
-            )
-            self._create_instance_with_retry(instance)
+                fixed_ip=str(host.ip_address) if host.ip_address else None, external=False,
+            )))
 
-        return mgmt_public_ip
+        # Create every VM CONCURRENTLY. Unlike OpenStack (whose shared bastion sshd, Neutron control
+        # plane and floating-IP pool force batching), GCP's Compute API is built for concurrent inserts
+        # and quota already admits the whole env — so submit all inserts at once, then wait, and each
+        # VM's create runs in parallel server-side. A failed VM is retried individually.
+        logger.info("Submitting %d instances concurrently...", len(specs))
+        instmap = {n: i for n, i in specs}
+        ops = {n: self._instances.insert(project=self._project, zone=self._zone, instance_resource=i)
+               for n, i in specs}
+        for name in list(ops):
+            attempt = 0
+            while True:
+                try:
+                    self._wait(ops[name])
+                    break
+                except Exception as exc:
+                    attempt += 1
+                    if attempt > _VM_CREATE_RETRIES:
+                        raise RuntimeError(f"Instance '{name}' failed after {attempt} attempts: {exc}")
+                    logger.warning("Instance '%s' failed (%s) — recreating (attempt %d/%d)",
+                                   name, exc, attempt, _VM_CREATE_RETRIES)
+                    self._delete(lambda name=name: self._instances.delete(
+                        project=self._project, zone=self._zone, instance=name), f"errored instance {name}")
+                    time.sleep(_POLL_INTERVAL)
+                    ops[name] = self._instances.insert(
+                        project=self._project, zone=self._zone, instance_resource=instmap[name])
+        logger.info("All %d instances ACTIVE", len(specs))
+
+        if self._management:
+            got = self._instances.get(project=self._project, zone=self._zone, instance=self._n("management-host"))
+            ip = got.network_interfaces[0].access_configs[0].nat_i_p
+            logger.info("Management host external IP: %s", ip)
+            return ip
+        return None
 
     def teardown_hosts(self, topology: NetworkTopology) -> None:
         names = [self._n(h.name) for h in topology.get_all_hosts()]
