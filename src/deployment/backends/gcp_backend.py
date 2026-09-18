@@ -283,6 +283,14 @@ class GCPBackend(CloudBackend):
         for fw in fw_names:
             self._delete(lambda fw=fw: self._firewalls.delete(project=self._project, firewall=fw), f"firewall {fw}")
 
+        # Sweep anything still attached to this VPC that the topology teardown above did not own:
+        # defender decoy VMs and the harness-created C2 host, plus any of their firewalls. They are
+        # created outside MHBench's ledger but live in MHBench's dedicated per-experiment VPC, so if
+        # left behind they pin the subnetwork/VPC deletes below (best-effort => silent) and strand the
+        # whole network, with the decoy vCPUs still counting against the global CPU quota. The VPC is
+        # exclusive to this experiment, so deleting everything remaining in it is safe.
+        self._sweep_vpc()
+
         sub_names = [self._subnet_name(s.name) for s in topology.get_all_subnets()]
         if self._management:
             sub_names.append(self._subnet_name("management"))
@@ -292,6 +300,27 @@ class GCPBackend(CloudBackend):
 
         self._delete(lambda: self._networks.delete(project=self._project, network=self._net_name()),
                      f"network {self._net_name()}")
+
+    def _sweep_vpc(self) -> None:
+        """Delete every instance and firewall still attached to this experiment's VPC. Called during
+        teardown to clear resources created outside MHBench's topology ledger (defender decoys, the
+        harness C2 and its firewalls) that would otherwise pin the subnetwork/VPC delete. Matches by
+        network membership (not name), so it catches decoys under any naming scheme. Best-effort."""
+        net_suffix = f"/networks/{self._net_name()}"
+        try:
+            for inst in self._instances.list(project=self._project, zone=self._zone):
+                if any((nic.network or "").endswith(net_suffix) for nic in inst.network_interfaces):
+                    self._delete(lambda n=inst.name: self._instances.delete(
+                        project=self._project, zone=self._zone, instance=n), f"stray instance {inst.name}")
+        except Exception:
+            logger.exception("VPC instance sweep failed for %s (continuing teardown)", self._net_name())
+        try:
+            for fw in self._firewalls.list(project=self._project):
+                if (fw.network or "").endswith(net_suffix):
+                    self._delete(lambda n=fw.name: self._firewalls.delete(
+                        project=self._project, firewall=n), f"stray firewall {fw.name}")
+        except Exception:
+            logger.exception("VPC firewall sweep failed for %s (continuing teardown)", self._net_name())
 
     def _delete(self, fn, label: str) -> None:
         from google.api_core.exceptions import NotFound  # lazy
