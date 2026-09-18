@@ -97,6 +97,18 @@ class GCPBackend(CloudBackend):
         prefixed = f"{self._project_name}-{name}" if self._project_name else name
         return _gcp_name(prefixed)
 
+    def _inst(self, name: str) -> str:
+        """Instance name — deliberately NOT experiment-prefixed, unlike _n(). GCP's internal DNS
+        serves a reverse (PTR) record built from the instance name, which the attacker resolves during
+        recon: an experiment-prefixed instance name (e.g. gcp-eqs-opus46-shell-staticall-t0-webserver0)
+        would hand the attacker the whole benchmark config. The plain topology name (webserver0) reads
+        like an ordinary host, matching the guest hostname. This is safe ONLY because GCP experiments
+        run SEQUENTIALLY (config.gcp.yaml max_active_experiments=1), so plain names are unique per zone;
+        teardown_hosts deletes by the same _inst() name and _sweep_vpc() catches anything left over.
+        Network resources (VPC/subnet/firewall/router) keep _n() — they are not attacker-visible and
+        the decoy's subnet lookup depends on the experiment-prefixed subnet name."""
+        return _gcp_name(name)
+
     def _net_name(self) -> str:
         return self._n("vpc")
 
@@ -406,7 +418,7 @@ class GCPBackend(CloudBackend):
         specs: list[tuple[str, object]] = []
         if self._management:
             mgmt = self._management
-            mname = self._n("management-host")
+            mname = self._inst("management-host")
             specs.append((mname, self._build_instance(
                 name=mname, host_name="management-host", vm_type=mgmt.vm_type, flavor=mgmt.flavor,
                 subnet_name="management", subnet_tag=self._tag(self._n("management")),
@@ -416,7 +428,7 @@ class GCPBackend(CloudBackend):
             subnet = topology.get_subnet_for_host(host)
             if not subnet:
                 raise RuntimeError(f"No subnet found for host '{host.name}'.")
-            hname = self._n(host.name)
+            hname = self._inst(host.name)
             specs.append((hname, self._build_instance(
                 name=hname, host_name=host.name, vm_type=host.vm_type, flavor=host.flavor,
                 subnet_name=subnet.name, subnet_tag=self._tag(self._n(subnet.name)),
@@ -451,16 +463,16 @@ class GCPBackend(CloudBackend):
         logger.info("All %d instances ACTIVE", len(specs))
 
         if self._management:
-            got = self._instances.get(project=self._project, zone=self._zone, instance=self._n("management-host"))
+            got = self._instances.get(project=self._project, zone=self._zone, instance=self._inst("management-host"))
             ip = got.network_interfaces[0].access_configs[0].nat_i_p
             logger.info("Management host external IP: %s", ip)
             return ip
         return None
 
     def teardown_hosts(self, topology: NetworkTopology) -> None:
-        names = [self._n(h.name) for h in topology.get_all_hosts()]
+        names = [self._inst(h.name) for h in topology.get_all_hosts()]
         if self._management:
-            names.append(self._n("management-host"))
+            names.append(self._inst("management-host"))
         for name in names:
             self._delete(lambda name=name: self._instances.delete(project=self._project, zone=self._zone, instance=name),
                          f"instance {name}")
@@ -468,9 +480,13 @@ class GCPBackend(CloudBackend):
     # -- Ansible support ----------------------------------------------------
 
     def get_console_output(self, host_full_name: str, length: int | None = None) -> str | None:
-        # host_full_name is already project-prefixed by the caller, but not yet
-        # GCP-sanitized; run it through the same coercion the instances got.
-        name = _gcp_name(host_full_name)
+        # The caller passes "{project}-{host}", but GCP instance names are now the plain host name
+        # (see _inst(): the experiment prefix is dropped so reverse DNS doesn't leak the config), so
+        # strip the project prefix before looking the instance up.
+        name = host_full_name
+        if self._project_name and name.startswith(f"{self._project_name}-"):
+            name = name[len(self._project_name) + 1:]
+        name = _gcp_name(name)
         try:
             out = self._instances.get_serial_port_output(project=self._project, zone=self._zone, instance=name)
             text = out.contents or ""
