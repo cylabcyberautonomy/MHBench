@@ -167,6 +167,17 @@ class NetworkDeployer:
                         peers.add(conn.to_subnet)
                     elif conn.bidirectional and conn.to_subnet == subnet.name:
                         peers.add(conn.from_subnet)
+                # The C2 lives in the attacker subnet (c2_on_kali). A real C2 accepts beacons from
+                # ANY of its implants regardless of which victim subnet they land in, so open the
+                # attacker subnet's ingress to every other subnet instead of relying on each topology
+                # hand-authoring a subnet_connection to it. That authoring is easy to forget and
+                # silently blocks deep-tier sandcat agents from calling home: e.g. equifax connects
+                # attacker<->webserver but NOT corporate<->attacker, so pivoted DB-tier agents could
+                # never beacon to Kali:8888 -> 0 data-tier footholds / 0 exfil under c2_on_kali.
+                # (Segmentation realism belongs on victim EGRESS, not on the C2's ingress.)
+                if subnet.name == "attacker_subnet":
+                    peers.update(s.name for s in topology.get_all_subnets()
+                                 if s.name != subnet.name and not s.external)
                 for peer_name in peers:
                     peer = topology.get_subnet_by_name(peer_name)
                     if peer:
