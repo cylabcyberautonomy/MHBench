@@ -6,19 +6,28 @@ from pathlib import Path
 from openstack.connection import Connection
 
 from config.config import Config
-from src.compilation.offline_registry_service import OfflineRegistryService
 
 logger = logging.getLogger(__name__)
 
 
 class UploadManager:
 
-    def __init__(self, conn: Connection, config: Config, offline_registry: OfflineRegistryService) -> None:
+    def __init__(self, conn: Connection, config: Config, offline_registry=None) -> None:
         self._conn = conn
         self._offline = offline_registry
 
     def upload_image(self, name: str, force: bool = False) -> None:
+        """Upload by resolving the on-disk location from the offline registry.
+
+        Kept for callers that construct UploadManager with an offline registry.
+        """
+        if self._offline is None:
+            raise ValueError("UploadManager needs an offline registry to resolve a location, "
+                             "or call upload_image_from(name, location).")
         location = self._offline.get_location(name)
+        self.upload_image_from(name, location, force=force)
+
+    def upload_image_from(self, name: str, location: str | None, force: bool = False) -> None:
         if not location or not Path(location).exists():
             logger.warning("'%s' is not compiled — skipping upload.", name)
             return

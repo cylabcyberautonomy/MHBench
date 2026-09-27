@@ -12,5 +12,12 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+# Google Cloud backend. Install with `uv sync --extra gcp` or `pip install 'mhbench[gcp]'`.
+gcp = [
+    "google-cloud-compute>=1.19.0",
+    "google-cloud-storage>=2.18.0",
+]
+
 [project.scripts]
 mhbench = "cli:cli"

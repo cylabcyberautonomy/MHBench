@@ -4,6 +4,7 @@ uv.lock
 
 # Config
 config/config.yaml
+config/config.*.yaml
 
 # Compilation
 *.qcow2

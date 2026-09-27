@@ -35,7 +35,7 @@
       changed_when: false
 
     - name: Start Caldera sandcat agent
-      shell: "nohup /opt/splunkd -server http://{{ caldera_ip }}:{{ caldera_port }} -group red &>/dev/null &"
+      shell: "setsid bash -c '/opt/splunkd -server http://{{ caldera_ip }}:{{ caldera_port }} -group red > /var/log/sandcat.log 2>&1 < <(sleep 2147483647)' &"
       args:
         executable: /bin/bash
 

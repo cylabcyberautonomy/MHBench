@@ -11,9 +11,8 @@ from src.compilation.compiler_service import CompilerService
 from src.compilation.offline_registry_service import OfflineRegistryService
 from src.deployment.online_registry_service import OnlineRegistryService
 from src.deployment.orchestrator import DeploymentOrchestrator
-from src.deployment.openstack_client import build_connection
+from src.deployment.backends import build_backend
 from src.deployment.spec_parsers import JsonSpecParser
-from src.deployment.upload_manager import UploadManager
 from src.playbooks.playbook_registry_service import PlaybookRegistryService
 
 _CONFIG_PATH = Path("config/config.yaml")
@@ -22,6 +21,14 @@ _CONFIG_PATH = Path("config/config.yaml")
 def _setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s", level=level)
+
+
+def _require_backend_config(config) -> None:
+    if config.active_backend_config() is None:
+        raise click.ClickException(
+            f"'{config.backend}' config block is required for this command "
+            f"(set backend: {config.backend} and its config in config.yaml)."
+        )
 
 
 def _load_config(config_path: Path, ansible_verbosity: int = 0) -> Config:
@@ -96,7 +103,7 @@ def compile(ctx: click.Context, images: tuple[str, ...], compile_all: bool, forc
 @click.option("--force", is_flag=True, help="Re-upload (delete + recreate) even if already in Glance")
 @click.pass_context
 def upload(ctx: click.Context, images: tuple[str, ...], upload_all: bool, force: bool) -> None:
-    """Push compiled qcow2 images to Glance.
+    """Push compiled images to the active backend (OpenStack Glance / GCP images).
 
     IMAGES are names from the offline registry (e.g. ubuntu_base webserver sensor).
     Pass --all to upload every compiled non-root image. Run after `compile`.
@@ -105,12 +112,11 @@ def upload(ctx: click.Context, images: tuple[str, ...], upload_all: bool, force:
         raise click.UsageError("Specify at least one IMAGE name or pass --all.")
 
     config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
-    if config.openstack is None:
-        raise click.ClickException("openstack config block is required for upload.")
+    _require_backend_config(config)
 
     offline = OfflineRegistryService(config)
-    conn = build_connection(config.openstack)
-    manager = UploadManager(conn, config, offline)
+    online = OnlineRegistryService(config)
+    backend = build_backend(config, online)
 
     if upload_all:
         names = [n for n in offline.list_images() if offline.get_parent(n) is not None]
@@ -124,7 +130,7 @@ def upload(ctx: click.Context, images: tuple[str, ...], upload_all: bool, force:
 
     for name in names:
         click.echo(f"Uploading '{name}'...")
-        manager.upload_image(name, force=force)
+        backend.upload_image(name, offline.get_location(name), force=force)
     click.echo("Done.")
 
 
@@ -135,12 +141,12 @@ def upload(ctx: click.Context, images: tuple[str, ...], upload_all: bool, force:
 @cli.command()
 @click.argument("spec", type=click.Path(exists=True, path_type=Path))
 @click.option("--c2c-url", default=None, help="C2C server URL (e.g. http://10.0.0.1:8888); overrides config")
-@click.option("--project-name", default=None, help="Prefix for all OpenStack resource names (e.g. experiment name)")
+@click.option("--project-name", default=None, help="Prefix for all cloud resource names (e.g. experiment name)")
 @click.option("--output-file", type=click.Path(path_type=Path), default=None,
               help="Write JSON result {mgmt_ip} to this file after provisioning")
 @click.pass_context
 def provision(ctx: click.Context, spec: Path, c2c_url: str | None, project_name: str | None, output_file: Path | None) -> None:
-    """Provision OpenStack networks and VMs for a topology (no Ansible).
+    """Provision cloud networks and VMs for a topology (no Ansible).
 
     SPEC is the path to an environment JSON (e.g. environments/dumbbell.json).
     """
@@ -162,16 +168,15 @@ def provision(ctx: click.Context, spec: Path, c2c_url: str | None, project_name:
             click.echo(f"  ERROR: {err}", err=True)
         raise click.ClickException("Spec validation failed.")
 
-    if config.openstack is None:
-        raise click.ClickException("openstack config block is required for provisioning.")
+    _require_backend_config(config)
 
     if c2c_url:
         parsed = urlparse(c2c_url)
         config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
 
     playbook_registry = PlaybookRegistryService(config)
-    conn = build_connection(config.openstack)
-    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+    backend = build_backend(config, online, project_name=project_name)
+    orchestrator = DeploymentOrchestrator(backend, config, online, playbook_registry, project_name=project_name)
 
     click.echo(f"Provisioning topology '{topology.name}'...")
     mgmt_floating_ip = orchestrator.provision(topology)
@@ -208,8 +213,7 @@ def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str 
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    if config.openstack is None:
-        raise click.ClickException("openstack config block is required for configuration.")
+    _require_backend_config(config)
 
     if c2c_url:
         parsed = urlparse(c2c_url)
@@ -219,8 +223,8 @@ def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str 
     config.attacker_only = attacker_only
 
     playbook_registry = PlaybookRegistryService(config)
-    conn = build_connection(config.openstack)
-    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+    backend = build_backend(config, online, project_name=project_name)
+    orchestrator = DeploymentOrchestrator(backend, config, online, playbook_registry, project_name=project_name)
 
     click.echo(f"Configuring topology '{topology.name}'...")
     orchestrator.configure(topology, mgmt_ip)
@@ -235,7 +239,7 @@ def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str 
 @click.argument("spec", type=click.Path(exists=True, path_type=Path))
 @click.option("--validate-only", is_flag=True, help="Parse and validate the spec without deploying")
 @click.option("--c2c-url", default=None, help="C2C server URL (e.g. http://10.0.0.1:8888); overrides config")
-@click.option("--project-name", default=None, help="Prefix for all OpenStack resource names (e.g. experiment name)")
+@click.option("--project-name", default=None, help="Prefix for all cloud resource names (e.g. experiment name)")
 @click.pass_context
 def deploy(ctx: click.Context, spec: Path, validate_only: bool, c2c_url: str | None, project_name: str | None) -> None:
     """Deploy a network topology from a JSON spec file.
@@ -263,16 +267,15 @@ def deploy(ctx: click.Context, spec: Path, validate_only: bool, c2c_url: str | N
         click.echo("Validation passed.")
         return
 
-    if config.openstack is None:
-        raise click.ClickException("openstack config block is required for deployment.")
+    _require_backend_config(config)
 
     if c2c_url:
         parsed = urlparse(c2c_url)
         config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
 
     playbook_registry = PlaybookRegistryService(config)
-    conn = build_connection(config.openstack)
-    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+    backend = build_backend(config, online, project_name=project_name)
+    orchestrator = DeploymentOrchestrator(backend, config, online, playbook_registry, project_name=project_name)
 
     click.echo(f"Deploying topology '{topology.name}'...")
     orchestrator.deploy(topology)
@@ -305,13 +308,12 @@ def teardown(ctx: click.Context, spec: Path, yes: bool, project_name: str | None
             abort=True,
         )
 
-    if config.openstack is None:
-        raise click.ClickException("openstack config block is required for teardown.")
+    _require_backend_config(config)
 
     online = OnlineRegistryService(config)
     playbook_registry = PlaybookRegistryService(config)
-    conn = build_connection(config.openstack)
-    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+    backend = build_backend(config, online, project_name=project_name)
+    orchestrator = DeploymentOrchestrator(backend, config, online, playbook_registry, project_name=project_name)
 
     click.echo(f"Tearing down topology '{topology.name}'...")
     orchestrator.teardown(topology)
@@ -343,12 +345,11 @@ def collect(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str | No
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    if config.openstack is None:
-        raise click.ClickException("openstack config block is required for collection.")
+    _require_backend_config(config)
 
     playbook_registry = PlaybookRegistryService(config)
-    conn = build_connection(config.openstack)
-    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+    backend = build_backend(config, online, project_name=project_name)
+    orchestrator = DeploymentOrchestrator(backend, config, online, playbook_registry, project_name=project_name)
 
     click.echo(f"Collecting host logs for '{topology.name}' -> {dest}...")
     orchestrator.collect(topology, mgmt_ip, str(dest))
@@ -378,12 +379,11 @@ def rotate_logs(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str 
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    if config.openstack is None:
-        raise click.ClickException("openstack config block is required for log rotation.")
+    _require_backend_config(config)
 
     playbook_registry = PlaybookRegistryService(config)
-    conn = build_connection(config.openstack)
-    orchestrator = DeploymentOrchestrator(conn, config, online, playbook_registry, project_name=project_name)
+    backend = build_backend(config, online, project_name=project_name)
+    orchestrator = DeploymentOrchestrator(backend, config, online, playbook_registry, project_name=project_name)
 
     click.echo(f"Rotating host logs for '{topology.name}'...")
     orchestrator.rotate_logs(topology, mgmt_ip)
