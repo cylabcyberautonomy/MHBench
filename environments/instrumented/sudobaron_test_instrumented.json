@@ -34,6 +34,21 @@
        "ip_address": "192.168.202.100"
       }
      ]
+    },
+    {
+     "name": "defender_subnet",
+     "cidr": "192.168.250.0/24",
+     "dns_servers": [
+      "8.8.8.8"
+     ],
+     "hosts": [
+      {
+       "name": "defender",
+       "vm_type": "ubuntu_base_running",
+       "flavor": "m2.large",
+       "ip_address": "192.168.250.10"
+      }
+     ]
     }
    ]
   }
