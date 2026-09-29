@@ -249,6 +249,40 @@ class AnsibleRunner:
                         self._log_console(host_name)
                     raise
 
+    def _setup_telemetry_relay(self, mgmt_floating_ip: str) -> None:
+        """Ship + start the transparent fan-out relay on the management host (the fixed bake target).
+
+        Runs setup_telemetry_relay.yml against the bastion directly on its floating IP. Best-effort:
+        a failure is logged and swallowed so it never fails an otherwise-good configure (sensors on
+        current images still target the ES directly; the relay only carries traffic once they bake to
+        it). The default downstream can be overridden per deploy via MHBENCH_RELAY_ES_ADDRESS.
+        """
+        plays_dir = str(_MHBENCH_DIR / "src" / "playbooks" / "plays")
+        extravars: dict = {}
+        es_override = os.environ.get("MHBENCH_RELAY_ES_ADDRESS")
+        if es_override:
+            extravars["relay_es_address"] = es_override
+        inventory = {"all": {"hosts": {"bastion": {
+            "ansible_host": mgmt_floating_ip,
+            "ansible_user": "root",
+            "ansible_ssh_private_key_file": self._ssh_key_path,
+            "ansible_ssh_common_args": "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+        }}}}
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                result = ansible_runner.run(
+                    private_data_dir=tmp, project_dir=plays_dir,
+                    playbook="setup_telemetry_relay.yml", inventory=inventory,
+                    extravars=extravars, quiet=True, verbosity=self._verbosity,
+                )
+            if result.status == "successful":
+                logger.info("Telemetry relay up on management host %s:9200", mgmt_floating_ip)
+            else:
+                logger.warning("Telemetry relay setup did not succeed (status=%s); continuing.",
+                               result.status)
+        except Exception as e:  # noqa: BLE001 — telemetry relay is best-effort; never fail configure on it
+            logger.warning("Telemetry relay setup errored (%s); continuing.", e)
+
     def run_parallel(self, topology: NetworkTopology, mgmt_floating_ip: str) -> None:
         # Same result as run(), but the per-host online plays (no cross-host deps) run concurrently in a
         # bounded thread pool, then the topology plays (setup_ssh_keys/add_data — cross-host) run serially
@@ -359,6 +393,11 @@ class AnsibleRunner:
         else:
             logger.warning("Bastion ControlMaster pre-warm did not succeed (status=%s); falling back to on-demand.",
                            warm.status)
+
+        # Stand up the transparent telemetry fan-out relay on the mgmt host — the constant bake target
+        # sensors ship to. Best-effort: on existing images sensors still target the ES directly, so a
+        # relay failure must not break configure (it only matters once sensors bake to the relay).
+        self._setup_telemetry_relay(mgmt_floating_ip)
 
         def _run_host_chain(host_name: str, chain: list[tuple[str, dict]]) -> None:
             log_path = f"{ansible_log_dir}/{host_name}.log" if ansible_log_dir else None
