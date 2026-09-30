@@ -20,8 +20,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+_HOP_BY_HOP = {"content-length", "transfer-encoding", "connection", "keep-alive"}
 
 _DESTS_PATH = "/etc/telemetry_relay/dests.json"
 
@@ -38,36 +41,64 @@ class _Relay(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def _forward(self):
+        """Transparent proxy: forward the request (method + path + body) to every dest, and return the
+        FIRST dest's real response (status + headers + body) to the client. Extra dests are fan-out
+        (fire-and-forget). Returning the real response — including headers like X-Elastic-Product — is
+        what lets a proper ES client (sf-processor's go-elasticsearch, which does a product-check GET /)
+        work through the relay, not just a header-agnostic shipper like falcosidekick."""
         length = int(self.headers.get("Content-Length", 0) or 0)
         body = self.rfile.read(length) if length else b""
+        data = body if self.command in ("POST", "PUT") else None
         dests = _load_dests()
-        ok = 0
-        for dest in dests:
+        primary = None  # (status, body, headers) from the first dest — proxied back to the client
+        for i, dest in enumerate(dests):
             # Preserve the sensor's path onto each dest that ends in "/".
             url = dest.rstrip("/") + self.path if dest.endswith("/") else dest
             try:
-                req = urllib.request.Request(url, data=body, method=self.command,
+                req = urllib.request.Request(url, data=data, method=self.command,
                                              headers={"Content-Type": self.headers.get("Content-Type", "application/json")})
-                with urllib.request.urlopen(req, timeout=5) as r:
-                    r.read()
-                ok += 1
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    rbody = r.read()
+                    if i == 0:
+                        primary = (r.status, rbody, r.headers)
+            except urllib.error.HTTPError as e:
+                # a 4xx/5xx from the dest is still a real response (e.g. ES rejecting a bulk) — proxy it.
+                if i == 0:
+                    primary = (e.code, e.read(), e.headers)
             except Exception:
-                pass  # a dead/slow downstream must never block the sensor
-        # Ack the sensor regardless (fire-and-forget upstream); 200 if any dest took it, 202 if none yet.
-        self.send_response(200 if ok else 202)
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+                if i == 0:
+                    primary = None  # dead/unreachable primary -> 502 below (extra dests never block)
+        if primary is not None:
+            status, rbody, rheaders = primary
+            self.send_response(status)
+            for k, v in rheaders.items():
+                if k.lower() not in _HOP_BY_HOP:
+                    self.send_header(k, v)
+            self.send_header("Content-Length", str(len(rbody)))
+            self.end_headers()
+            self.wfile.write(rbody)
+        else:
+            self.send_response(502)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
     do_POST = _forward
     do_PUT = _forward
+    do_HEAD = _forward
+    do_DELETE = _forward
 
-    def do_GET(self):  # health check
-        self.send_response(200)
-        payload = json.dumps({"relay": "up", "dests": _load_dests()}).encode()
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
+    def do_GET(self):
+        # /__relay__ is the relay's own health check; everything else is proxied to the dest (so ES
+        # version/product-check GETs pass through with the real response).
+        if self.path == "/__relay__":
+            payload = json.dumps({"relay": "up", "dests": _load_dests()}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        self._forward()
 
     def log_message(self, *a):  # quiet
         pass
