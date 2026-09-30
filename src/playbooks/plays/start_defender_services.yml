@@ -45,6 +45,17 @@
         enabled: yes
         daemon_reload: yes
 
+    # (a) Repoint falcosidekick from its baked ES target to the telemetry RELAY on the management host
+    # (the constant bake target). The relay then forwards to the per-run downstream — the defender box
+    # ES when one exists, else the default ES. Done here, before falcosidekick starts, so it ships to
+    # the relay from first start. The relay address is the management host's fixed internal IP:9200.
+    - name: Repoint falcosidekick to the telemetry relay
+      ansible.builtin.lineinfile:
+        path: /etc/falcosidekick/config.yaml
+        regexp: '^\s*hostport:'
+        line: '  hostport: "{{ telemetry_relay_addr | default("http://10.0.1.10:9200") }}"'
+      ignore_errors: yes
+
     - name: Enable and start falcosidekick
       systemd:
         name: falcosidekick

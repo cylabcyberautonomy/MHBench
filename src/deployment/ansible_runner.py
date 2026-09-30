@@ -249,16 +249,24 @@ class AnsibleRunner:
                         self._log_console(host_name)
                     raise
 
-    def _setup_telemetry_relay(self, mgmt_floating_ip: str) -> None:
+    def _setup_telemetry_relay(self, mgmt_floating_ip: str, topology: NetworkTopology) -> None:
         """Ship + start the transparent fan-out relay on the management host (the fixed bake target).
 
         Runs setup_telemetry_relay.yml against the bastion directly on its floating IP. Best-effort:
-        a failure is logged and swallowed so it never fails an otherwise-good configure (sensors on
-        current images still target the ES directly; the relay only carries traffic once they bake to
-        it). The default downstream can be overridden per deploy via MHBENCH_RELAY_ES_ADDRESS.
+        a failure is logged and swallowed so it never fails an otherwise-good configure.
+
+        (b) Per-run downstream: if the topology has a defender box (defender_subnet), the relay routes to
+        THAT box's ES (box_ip:9200) — so victim sensors -> relay -> this run's defender box ES,
+        automatically. With no defender box it keeps the default ES. Overridable via
+        MHBENCH_RELAY_ES_ADDRESS.
         """
         plays_dir = str(_MHBENCH_DIR / "src" / "playbooks" / "plays")
         extravars: dict = {}
+        box_ip = next((str(h.ip_address)
+                       for sub in topology.get_all_subnets() if sub.name == "defender_subnet"
+                       for h in sub.hosts if h.ip_address), None)
+        if box_ip:
+            extravars["relay_es_address"] = f"http://{box_ip}:9200"
         es_override = os.environ.get("MHBENCH_RELAY_ES_ADDRESS")
         if es_override:
             extravars["relay_es_address"] = es_override
@@ -397,7 +405,7 @@ class AnsibleRunner:
         # Stand up the transparent telemetry fan-out relay on the mgmt host — the constant bake target
         # sensors ship to. Best-effort: on existing images sensors still target the ES directly, so a
         # relay failure must not break configure (it only matters once sensors bake to the relay).
-        self._setup_telemetry_relay(mgmt_floating_ip)
+        self._setup_telemetry_relay(mgmt_floating_ip, topology)
 
         def _run_host_chain(host_name: str, chain: list[tuple[str, dict]]) -> None:
             log_path = f"{ansible_log_dir}/{host_name}.log" if ansible_log_dir else None

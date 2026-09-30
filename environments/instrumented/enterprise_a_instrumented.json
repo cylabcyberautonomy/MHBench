@@ -237,7 +237,7 @@
       {
        "name": "defender",
        "vm_type": "ubuntu_base_running",
-       "flavor": "m2.large",
+       "flavor": "m2.huge",
        "ip_address": "192.168.250.10"
       }
      ]
