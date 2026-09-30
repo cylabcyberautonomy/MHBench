@@ -321,6 +321,91 @@ def teardown(ctx: click.Context, spec: Path, yes: bool, project_name: str | None
 
 
 # ---------------------------------------------------------------------------
+# request-ingress  (defender-requested box ingress)
+# ---------------------------------------------------------------------------
+
+def _defender_box_ip(topology) -> str | None:
+    for s in topology.get_all_subnets():
+        if s.name == "defender_subnet":
+            for h in s.hosts:
+                if h.ip_address:
+                    return str(h.ip_address)
+    return None
+
+
+def _mgmt_ssh(mgmt_ip: str, ssh_key: str, remote: str):
+    import os, subprocess
+    return subprocess.run(
+        ["ssh", "-i", os.path.expanduser(ssh_key), "-o", "BatchMode=yes",
+         "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+         "-o", "ConnectTimeout=15", f"root@{mgmt_ip}", remote],
+        capture_output=True, text=True, timeout=90)
+
+
+def _mgmt_write(mgmt_ip: str, ssh_key: str, path: str, content: str, mode: str = "0644"):
+    import base64
+    b64 = base64.b64encode(content.encode()).decode()
+    return _mgmt_ssh(mgmt_ip, ssh_key,
+                     f"mkdir -p $(dirname {path}) && echo {b64} | base64 -d > {path} && chmod {mode} {path}")
+
+
+@cli.command(name="request-ingress")
+@click.argument("spec", type=click.Path(exists=True, path_type=Path))
+@click.option("--project-name", default=None, help="Prefix used when deploying")
+@click.option("--mgmt-ip", required=True, help="Management host floating IP (from provisioning)")
+@click.option("--telemetry", "telemetry_ports", multiple=True, type=int,
+              help="Box port to route relay telemetry to, e.g. 9200 (repeatable)")
+@click.option("--forward", "forward_ports", multiple=True, type=int,
+              help="Box port to raw-forward victim->mgmt:PORT->box:PORT, e.g. 8000 (repeatable)")
+@click.pass_context
+def request_ingress(ctx: click.Context, spec: Path, project_name: str | None, mgmt_ip: str,
+                    telemetry_ports: tuple, forward_ports: tuple) -> None:
+    """Provision DEFENDER-REQUESTED box ingress — exactly the ports the defender asks for, nothing more.
+
+    --telemetry PORT: point the mgmt relay's downstream at the defender box ES (box:PORT). Sensors
+       already ship to the relay; this routes them onward to the box. No new firewall port (the relay
+       port is already open to victims).
+    --forward PORT: raw TCP passthrough victim->mgmt:PORT->box:PORT (server-mediated EDRs like
+       Velociraptor). Opens tcp/PORT on the mgmt host from the victim subnets + starts the forwarder.
+
+    A no-defender run never calls this, so the box stays fully isolated (zero open ports).
+    """
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
+    _require_backend_config(config)
+    topology = JsonSpecParser().parse(spec)
+    box_ip = _defender_box_ip(topology)
+    if not box_ip:
+        raise click.ClickException("Topology has no defender_subnet/box; nothing to route ingress to.")
+    ssh_key = config.ssh_key_path
+
+    if telemetry_ports:
+        import json
+        dests = [f"http://{box_ip}:{p}/" for p in telemetry_ports]
+        r = _mgmt_write(mgmt_ip, ssh_key, "/etc/telemetry_relay/dests.json",
+                        json.dumps({"dests": dests}))
+        click.echo(f"telemetry -> relay routes to {dests}: {'ok' if r.returncode == 0 else 'FAILED'}")
+
+    if forward_ports:
+        victim_cidrs = sorted({str(s.cidr) for s in topology.get_all_subnets()
+                               if not s.external and s.name not in ("attacker_subnet", "defender_subnet")})
+        online = OnlineRegistryService(config)
+        backend = build_backend(config, online, project_name=project_name)
+        aux = (Path(config.playbooks.playbooks_dir) / "aux_files" / "tcp_forward.py").resolve()
+        for p in forward_ports:
+            backend.add_management_ingress(p, victim_cidrs)
+            _mgmt_write(mgmt_ip, ssh_key, "/usr/local/bin/tcp_forward.py", aux.read_text(), mode="0755")
+            unit = (f"[Unit]\nDescription=arena TCP forward :{p} -> box\n"
+                    "After=network-online.target\nWants=network-online.target\n\n"
+                    f"[Service]\nExecStart=/usr/bin/python3 /usr/local/bin/tcp_forward.py {p} {box_ip} {p}\n"
+                    "Restart=always\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n")
+            _mgmt_write(mgmt_ip, ssh_key, f"/etc/systemd/system/tcp_forward_{p}.service", unit)
+            r = _mgmt_ssh(mgmt_ip, ssh_key,
+                          f"systemctl daemon-reload && systemctl enable --now tcp_forward_{p}")
+            click.echo(f"forward victim->mgmt:{p}->box:{p}: {'ok' if r.returncode == 0 else 'FAILED'}")
+    click.echo("request-ingress done.")
+
+
+# ---------------------------------------------------------------------------
 # collect
 # ---------------------------------------------------------------------------
 

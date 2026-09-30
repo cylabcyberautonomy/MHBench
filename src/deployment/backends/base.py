@@ -28,6 +28,17 @@ class CloudBackend(ABC):
     #: short provider identifier, e.g. ``"openstack"`` / ``"gcp"``
     name: str = "cloud"
 
+    # -- runtime ingress (defender-requested ports) -------------------------
+
+    def add_management_ingress(self, port: int, sources: list[str]) -> None:
+        """Open tcp/<port> on the management host from <sources> (victim CIDRs). Used by
+        `request-ingress` when a defender asks the environment to forward a server-mediated port
+        (e.g. Velociraptor :8000) through the mgmt host to its box. Default: no-op — a backend whose
+        management ingress is already open (GCP's is 0.0.0.0/0) needs nothing here."""
+        import logging
+        logging.getLogger(__name__).info(
+            "add_management_ingress: no-op for backend %r (tcp/%d already reachable)", self.name, port)
+
     # -- provisioning -------------------------------------------------------
 
     @abstractmethod
