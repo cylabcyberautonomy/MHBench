@@ -15,7 +15,17 @@ from config.config import Config
 from src.abstractions.network import Host, NetworkTopology, Subnet
 from src.deployment.online_registry_service import OnlineRegistryService
 
+import re
+
 logger = logging.getLogger(__name__)
+
+
+def _dns_safe(name: str) -> str:
+    """OpenStack rejects a `hostname` that isn't ^[a-zA-Z0-9]+[a-zA-Z0-9-]*[a-zA-Z0-9]+$ (no underscores).
+    Decoy names like 'decoy_0' must be sanitized to 'decoy-0' for the in-VM hostname (the display name /
+    prefix can keep underscores)."""
+    s = re.sub(r"[^a-zA-Z0-9-]", "-", name).strip("-")
+    return s or "host"
 
 _BATCH_SIZE = 6   # per-env cap on concurrent same-flavor VM-creates; with the harness provision-gate (5 envs) this bounds global creates to 5*6=30 — the known-safe ceiling (batch 10 * provision 6 = 60 half-provisioned networking -> setup_ssh_keys UNREACHABLE -> whole-env retries)
 _DEPLOY_TIMEOUT = 1200  # 20 min. The m2.large attacker's 7.2GB Kali image is pulled from Glance on any node that
@@ -411,7 +421,7 @@ class HostDeployer:
             network_spec["fixed_ip"] = str(host.ip_address)
         logger.info("Submitting single host: %s  image=%s  flavor=%s", self._n(host.name), image.name, flavor.name)
         server = self._conn.compute.create_server(
-            name=self._n(host.name), hostname=host.name, imageRef=image.id, flavorRef=flavor.id,
+            name=self._n(host.name), hostname=_dns_safe(host.name), imageRef=image.id, flavorRef=flavor.id,
             networks=[network_spec], security_groups=[{"name": self._n(subnet.sg_name)}],
             key_name=self._ssh_key_name, config_drive=True,
         )
