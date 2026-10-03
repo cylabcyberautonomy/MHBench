@@ -424,6 +424,9 @@ class HostDeployer:
             name=self._n(host.name), hostname=_dns_safe(host.name), imageRef=image.id, flavorRef=flavor.id,
             networks=[network_spec], security_groups=[{"name": self._n(subnet.sg_name)}],
             key_name=self._ssh_key_name, config_drive=True,
+            # Tag dynamically-added hosts (decoys) so teardown can reap them: they are PREFIXED like
+            # topology hosts (name=self._n(...)), so a name-prefix heuristic can't tell them apart.
+            metadata={"arena_dynamic_host": "true"},
         )
         deadline = time.monotonic() + _DEPLOY_TIMEOUT
         while True:
