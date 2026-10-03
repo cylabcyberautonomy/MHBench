@@ -24,7 +24,8 @@
        "flavor": "m1.small",
        "ip_address": "192.168.200.11"
       }
-     ]
+     ],
+     "perimeter": true
     },
     {
      "name": "corporate_subnet",
