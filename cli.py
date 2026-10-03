@@ -475,5 +475,74 @@ def rotate_logs(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str 
     click.echo("Rotation complete.")
 
 
+# ---------------------------------------------------------------------------
+# per-host dynamic ops (arena dynamic topology interface: a running defender asks the
+# environment to add a decoy / rebuild a compromised host / remove one)
+# ---------------------------------------------------------------------------
+
+def _dynamic_orchestrator(ctx: click.Context, spec: Path, project_name: str | None):
+    """Shared setup for the per-host subcommands: parse the spec + build the orchestrator."""
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
+    _require_backend_config(config)
+    online = OnlineRegistryService(config)
+    topology = JsonSpecParser().parse(spec)
+    backend = build_backend(config, online, project_name=project_name)
+    orch = DeploymentOrchestrator(backend, config, online, PlaybookRegistryService(config), project_name=project_name)
+    return topology, orch
+
+
+@cli.command("add-host")
+@click.argument("spec", type=click.Path(exists=True, path_type=Path))
+@click.option("--project-name", default=None, help="Prefix used during provisioning")
+@click.option("--name", required=True, help="Host name (e.g. decoy0)")
+@click.option("--role", default="decoy", help="decoy | apache_vuln | a literal vm_type")
+@click.option("--subnet", default=None, help="Topology subnet name to place the host on")
+@click.option("--output-file", type=click.Path(path_type=Path), default=None, help="Write JSON {name, ip}")
+@click.pass_context
+def add_host(ctx: click.Context, spec: Path, project_name: str | None, name: str, role: str,
+             subnet: str | None, output_file: Path | None) -> None:
+    """Create ONE host (a decoy) on an existing topology subnet; print + write {name, ip}."""
+    import json
+    topology, orch = _dynamic_orchestrator(ctx, spec, project_name)
+    result = orch.add_host(topology, name=name, role=role, subnet_name=subnet)
+    click.echo(f"add-host: {result}")
+    if output_file:
+        output_file.write_text(json.dumps(result))
+
+
+@cli.command("rebuild-host")
+@click.argument("spec", type=click.Path(exists=True, path_type=Path))
+@click.option("--project-name", default=None, help="Prefix used during provisioning")
+@click.option("--target", required=True, help="Host name or IP to rebuild")
+@click.option("--output-file", type=click.Path(path_type=Path), default=None, help="Write JSON {ok}")
+@click.pass_context
+def rebuild_host(ctx: click.Context, spec: Path, project_name: str | None, target: str,
+                 output_file: Path | None) -> None:
+    """Rebuild ONE existing host from the image it booted from (restore to pristine)."""
+    import json
+    topology, orch = _dynamic_orchestrator(ctx, spec, project_name)
+    result = orch.rebuild_host(topology, target)
+    click.echo(f"rebuild-host: {result}")
+    if output_file:
+        output_file.write_text(json.dumps(result))
+
+
+@cli.command("remove-host")
+@click.argument("spec", type=click.Path(exists=True, path_type=Path))
+@click.option("--project-name", default=None, help="Prefix used during provisioning")
+@click.option("--target", required=True, help="Host name or IP to delete")
+@click.option("--output-file", type=click.Path(path_type=Path), default=None, help="Write JSON {ok}")
+@click.pass_context
+def remove_host(ctx: click.Context, spec: Path, project_name: str | None, target: str,
+                output_file: Path | None) -> None:
+    """Delete ONE existing host."""
+    import json
+    topology, orch = _dynamic_orchestrator(ctx, spec, project_name)
+    result = orch.remove_host(topology, target)
+    click.echo(f"remove-host: {result}")
+    if output_file:
+        output_file.write_text(json.dumps(result))
+
+
 if __name__ == "__main__":
     cli()

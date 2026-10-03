@@ -55,6 +55,18 @@ class OpenStackBackend(CloudBackend):
     def provision_hosts(self, topology: NetworkTopology) -> str | None:
         return HostDeployer(self._conn, self._config, self._online, self._project_name).deploy(topology)
 
+    def _host_deployer(self) -> HostDeployer:
+        return HostDeployer(self._conn, self._config, self._online, self._project_name)
+
+    def create_host(self, host, subnet) -> str:
+        return self._host_deployer().create_one_host(host, subnet)
+
+    def rebuild_host(self, display_name: str) -> None:
+        self._host_deployer().rebuild_one(display_name)
+
+    def remove_host(self, display_name: str) -> None:
+        self._host_deployer().delete_one(display_name)
+
     def teardown_hosts(self, topology: NetworkTopology) -> None:
         HostDeployer(self._conn, self._config, self._online, self._project_name).teardown(topology)
 

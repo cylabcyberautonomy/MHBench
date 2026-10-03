@@ -12,7 +12,7 @@ from openstack.connection import Connection
 from openstack import exceptions as sdk_exceptions
 
 from config.config import Config
-from src.abstractions.network import Host, NetworkTopology
+from src.abstractions.network import Host, NetworkTopology, Subnet
 from src.deployment.online_registry_service import OnlineRegistryService
 
 logger = logging.getLogger(__name__)
@@ -381,3 +381,98 @@ class HostDeployer:
             gone = [sid for sid in pending if self._conn.compute.find_server(sid) is None]
             for sid in gone:
                 logger.info("Deleted: %s", pending.pop(sid))
+
+    # --- per-host dynamic ops (defender-driven, during the run) ------------------------------------
+    # Single-host create/rebuild/delete for the arena's dynamic topology-mutation interface (add/rebuild/
+    # remove host). Factored from deploy()'s per-host path; decoys get NO floating IP (internal-only).
+    # Live-SDK — exercised only against a real cloud (no unit tests).
+    def _fixed_ip(self, server_id: str, net_id: str) -> str:
+        for port in self._conn.network.ports(device_id=server_id, network_id=net_id):
+            for fip in (port.fixed_ips or []):
+                if fip.get("ip_address"):
+                    return fip["ip_address"]
+        raise RuntimeError(f"No fixed IP found for server {server_id}")
+
+    def create_one_host(self, host: Host, subnet: Subnet) -> str:
+        """Create ONE host (e.g. a decoy) outside the batch deploy; wait ACTIVE; return its fixed IP.
+        Mirrors deploy()'s per-host block for a single VM. ip_address unset -> OpenStack auto-assigns."""
+        base_image_name = self._online.get_base_image(host.vm_type)
+        image = self._conn.image.find_image(base_image_name)
+        if not image:
+            raise RuntimeError(f"Image '{base_image_name}' not found in Glance.")
+        flavor = self._conn.compute.find_flavor(host.flavor)
+        if not flavor:
+            raise RuntimeError(f"Flavor '{host.flavor}' not found in OpenStack.")
+        os_net = self._conn.network.find_network(self._n(subnet.name), project_id=self._project_id)
+        if not os_net:
+            raise RuntimeError(f"OpenStack network '{self._n(subnet.name)}' not found.")
+        network_spec: dict = {"uuid": os_net.id}
+        if host.ip_address:
+            network_spec["fixed_ip"] = str(host.ip_address)
+        logger.info("Submitting single host: %s  image=%s  flavor=%s", self._n(host.name), image.name, flavor.name)
+        server = self._conn.compute.create_server(
+            name=self._n(host.name), hostname=host.name, imageRef=image.id, flavorRef=flavor.id,
+            networks=[network_spec], security_groups=[{"name": self._n(subnet.sg_name)}],
+            key_name=self._ssh_key_name, config_drive=True,
+        )
+        deadline = time.monotonic() + _DEPLOY_TIMEOUT
+        while True:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"'{self._n(host.name)}' did not reach ACTIVE within timeout.")
+            time.sleep(_POLL_INTERVAL)
+            current = self._conn.compute.get_server(server.id)
+            if current.status == "ACTIVE":
+                self._log_instance_info(self._n(host.name), current, flavor, image)
+                break
+            if current.status == "ERROR":
+                raise RuntimeError(f"'{self._n(host.name)}' entered ERROR: {getattr(current, 'fault', 'unknown')}")
+        return self._fixed_ip(server.id, os_net.id)
+
+    def _find_one(self, target: str):
+        """The single project server matching `target` — tried first as a prefixed display name, then as
+        a fixed IP (RestoreServer/ShutdownServer carry the host IP, not its name)."""
+        byname = next(iter(self._conn.compute.servers(name=self._n(target), project_id=self._project_id)), None)
+        if byname:
+            return byname
+        for s in self._conn.compute.servers(project_id=self._project_id, details=True):
+            for addrs in (getattr(s, "addresses", {}) or {}).values():
+                if any(a.get("addr") == target for a in addrs):
+                    return s
+        return None
+
+    def rebuild_one(self, display_name: str) -> None:
+        """Rebuild one existing host from the image it booted from (restore to pristine)."""
+        server = self._find_one(display_name)
+        if not server:
+            raise RuntimeError(f"Server '{self._n(display_name)}' not found for rebuild.")
+        image_id = server.image.get("id") if isinstance(server.image, dict) else getattr(server, "image_id", None)
+        if not image_id:
+            raise RuntimeError(f"Could not resolve current image for '{self._n(display_name)}' to rebuild.")
+        logger.info("Rebuilding: %s (image=%s)", self._n(display_name), image_id)
+        self._conn.compute.rebuild_server(server.id, name=server.name, image=image_id)
+        deadline = time.monotonic() + _DEPLOY_TIMEOUT
+        while True:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"'{self._n(display_name)}' did not return to ACTIVE after rebuild.")
+            time.sleep(_POLL_INTERVAL)
+            current = self._conn.compute.get_server(server.id)
+            if current.status == "ACTIVE":
+                break
+            if current.status == "ERROR":
+                raise RuntimeError(f"'{self._n(display_name)}' entered ERROR during rebuild.")
+
+    def delete_one(self, display_name: str) -> None:
+        """Delete one existing host (tolerating one already gone); wait until it's really gone."""
+        server = self._find_one(display_name)
+        if not server:
+            logger.info("delete_one: '%s' already gone", self._n(display_name))
+            return
+        if not self._delete_server(server.id, self._n(display_name)):
+            return
+        deadline = time.monotonic() + _DELETE_TIMEOUT
+        while time.monotonic() <= deadline:
+            time.sleep(_POLL_INTERVAL)
+            if self._conn.compute.find_server(server.id) is None:
+                logger.info("Deleted: %s", self._n(display_name))
+                return
+        raise TimeoutError(f"Timed out deleting '{self._n(display_name)}'.")
