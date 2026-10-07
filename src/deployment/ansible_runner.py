@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -249,6 +250,129 @@ class AnsibleRunner:
                         self._log_console(host_name)
                     raise
 
+    def _setup_telemetry_relay(self, mgmt_floating_ip: str, topology: NetworkTopology) -> None:
+        """Ship + start the transparent fan-out relay on the management host (the fixed bake target).
+
+        Runs setup_telemetry_relay.yml against the bastion directly on its floating IP. Best-effort:
+        a failure is logged and swallowed so it never fails an otherwise-good configure.
+
+        The relay is set up with its DEFAULT downstream (the baked ES) only. It does NOT assume the
+        defender box: the relay is forwarded to a box ES only when the DEFENDER requests it (via
+        `request-ingress <port>:telemetry`), because that dest is only useful if the defender actually
+        runs ES there. Overridable via MHBENCH_RELAY_ES_ADDRESS.
+        """
+        plays_dir = str(_MHBENCH_DIR / "src" / "playbooks" / "plays")
+        extravars: dict = {}
+        es_override = os.environ.get("MHBENCH_RELAY_ES_ADDRESS")
+        if es_override:
+            extravars["relay_es_address"] = es_override
+        inventory = {"all": {"hosts": {"bastion": {
+            "ansible_host": mgmt_floating_ip,
+            "ansible_user": "root",
+            "ansible_ssh_private_key_file": self._ssh_key_path,
+            "ansible_ssh_common_args": "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+        }}}}
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                result = ansible_runner.run(
+                    private_data_dir=tmp, project_dir=plays_dir,
+                    playbook="setup_telemetry_relay.yml", inventory=inventory,
+                    extravars=extravars, quiet=True, verbosity=self._verbosity,
+                )
+            if result.status == "successful":
+                logger.info("Telemetry relay up on management host %s:9200", mgmt_floating_ip)
+            else:
+                logger.warning("Telemetry relay setup did not succeed (status=%s); continuing.",
+                               result.status)
+        except Exception as e:  # noqa: BLE001 — telemetry relay is best-effort; never fail configure on it
+            logger.warning("Telemetry relay setup errored (%s); continuing.", e)
+
+    # --- per-system scoped key injection (no god-key handed to an agent) --------------------------------
+    # The environment ISSUES two scoped keys on top of the broad management key (which stays for
+    # provisioning and never enters a spec): attacker_key opens the foothold only, defender_key opens the
+    # defender box + victims. Injected here at configure so every deploy path gets them. Classified by
+    # subnet: attacker_subnet -> foothold, defender_subnet -> box, everything else internal -> victim.
+    _ATTACKER_SUBNET = "attacker_subnet"
+    _DEFENDER_SUBNET = "defender_subnet"
+
+    def _issue_scoped_keys(self):
+        keydir = _MHBENCH_DIR / "keys"
+        keydir.mkdir(parents=True, exist_ok=True)
+        out = []
+        for name in ("attacker_key", "defender_key"):
+            p = keydir / name
+            if not p.exists():
+                subprocess.run(["ssh-keygen", "-t", "ed25519", "-f", str(p), "-N", "", "-q",
+                                "-C", f"arena-{name}"], check=True)
+                p.chmod(0o600)
+            out.append(p)
+        return out[0], out[1]
+
+    def _ssh_base(self):
+        return ["-i", str(self._ssh_key_path), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=15"]
+
+    def _inject_pubkey(self, pubkey: str, host_ip: str, mgmt_ip: str) -> bool:
+        """Append pubkey to root's authorized_keys on host_ip, reached via the bastion. Idempotent."""
+        proxy = "ssh -W %h:%p " + " ".join(self._ssh_base()) + f" root@{mgmt_ip}"
+        remote = ("install -d -m700 ~/.ssh && touch ~/.ssh/authorized_keys && "
+                  f"grep -qxF {pubkey!r} ~/.ssh/authorized_keys || echo {pubkey!r} >> ~/.ssh/authorized_keys")
+        r = subprocess.run(["ssh", *self._ssh_base(), "-o", f"ProxyCommand={proxy}", f"root@{host_ip}", remote],
+                           capture_output=True, text=True, timeout=60)
+        return r.returncode == 0
+
+    def _inject_bastion_jump(self, pubkey: str, targets: list, mgmt_ip: str) -> bool:
+        """Forward-only entry on the bastion: this key may ONLY tunnel (-W) to `targets`, no shell/command."""
+        if not targets:
+            return True
+        opts = ('command="/bin/false",restrict,port-forwarding,'
+                + ",".join(f'permitopen="{t}"' for t in targets))
+        entry = f"{opts} {pubkey}"
+        keymat = pubkey.split()[1]
+        remote = ("install -d -m700 ~/.ssh && touch ~/.ssh/authorized_keys && "
+                  f"{{ grep -vF {keymat!r} ~/.ssh/authorized_keys || true; }} > ~/.ssh/ak.tmp && "
+                  "mv ~/.ssh/ak.tmp ~/.ssh/authorized_keys && "
+                  f"printf '%s\\n' {entry!r} >> ~/.ssh/authorized_keys")
+        r = subprocess.run(["ssh", *self._ssh_base(), f"root@{mgmt_ip}", remote],
+                           capture_output=True, text=True, timeout=60)
+        return r.returncode == 0
+
+    def _inject_scoped_keys(self, topology: NetworkTopology, mgmt_floating_ip: str) -> None:
+        try:
+            ak, dk = self._issue_scoped_keys()
+            ak_pub = Path(str(ak) + ".pub").read_text().strip()
+            dk_pub = Path(str(dk) + ".pub").read_text().strip()
+        except Exception as e:  # noqa: BLE001 — best-effort; never fail configure
+            logger.warning("Scoped-key generation failed (%s); skipping injection.", e)
+            return
+        foothold_ip = None
+        box_ip = None
+        victim_ips: list[str] = []
+        for sub in topology.get_all_subnets():
+            for h in sub.hosts:
+                if not h.ip_address:
+                    continue
+                ip = str(h.ip_address)
+                if sub.name == self._ATTACKER_SUBNET or h.vm_type == "kali_running":
+                    foothold_ip = ip
+                elif sub.name == self._DEFENDER_SUBNET:
+                    box_ip = ip
+                else:
+                    victim_ips.append(ip)
+        try:
+            if foothold_ip:
+                ok = self._inject_pubkey(ak_pub, foothold_ip, mgmt_floating_ip)
+                logger.info("Scoped key: attacker_key -> foothold %s: %s", foothold_ip, "ok" if ok else "FAILED")
+                self._inject_bastion_jump(ak_pub, [f"{foothold_ip}:22"], mgmt_floating_ip)
+            dtargets = ([box_ip] if box_ip else []) + victim_ips
+            for ip in dtargets:
+                ok = self._inject_pubkey(dk_pub, ip, mgmt_floating_ip)
+                logger.info("Scoped key: defender_key -> %s: %s", ip, "ok" if ok else "FAILED")
+            if dtargets:
+                self._inject_bastion_jump(dk_pub, [f"{ip}:22" for ip in dtargets], mgmt_floating_ip)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Scoped-key injection errored (%s); continuing.", e)
+
     def run_parallel(self, topology: NetworkTopology, mgmt_floating_ip: str) -> None:
         # Same result as run(), but the per-host online plays (no cross-host deps) run concurrently in a
         # bounded thread pool, then the topology plays (setup_ssh_keys/add_data — cross-host) run serially
@@ -360,6 +484,11 @@ class AnsibleRunner:
             logger.warning("Bastion ControlMaster pre-warm did not succeed (status=%s); falling back to on-demand.",
                            warm.status)
 
+        # Stand up the transparent telemetry fan-out relay on the mgmt host — the constant bake target
+        # sensors ship to. Best-effort: on existing images sensors still target the ES directly, so a
+        # relay failure must not break configure (it only matters once sensors bake to the relay).
+        self._setup_telemetry_relay(mgmt_floating_ip, topology)
+
         def _run_host_chain(host_name: str, chain: list[tuple[str, dict]]) -> None:
             log_path = f"{ansible_log_dir}/{host_name}.log" if ansible_log_dir else None
             with tempfile.TemporaryDirectory() as tmp:  # own private_data_dir per thread — a shared one clobbers
@@ -434,6 +563,12 @@ class AnsibleRunner:
                     f"Topology configure failed on {len(errors)} play(s): "
                     + "; ".join(f"{p}: {e}" for p, e in errors[:5])
                 )
+
+        # Inject the per-system scoped keys now that all hosts are up + configured: attacker_key on the
+        # foothold, defender_key on the box + victims, plus forward-only bastion jump entries. This runs
+        # on EVERY deploy path (a bare `cli.py deploy` AND the full harness both reach run_parallel), so
+        # the scoped keys are authorized with no separate step. Best-effort: never fails configure.
+        self._inject_scoped_keys(topology, mgmt_floating_ip)
 
     def collect(self, topology: NetworkTopology, mgmt_floating_ip: str, dest: str) -> None:
         # Post-experiment log exfil: rebuild the same bastion ProxyJump inventory as run() and

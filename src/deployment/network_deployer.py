@@ -176,8 +176,19 @@ class NetworkDeployer:
                 # never beacon to Kali:8888 -> 0 data-tier footholds / 0 exfil under c2_on_kali.
                 # (Segmentation realism belongs on victim EGRESS, not on the C2's ingress.)
                 if subnet.name == "attacker_subnet":
+                    # ...but NOT the defender subnet: the C2 accepts beacons from victim implants, not
+                    # from the defender box (which is isolated from the attacker in both directions).
                     peers.update(s.name for s in topology.get_all_subnets()
-                                 if s.name != subnet.name and not s.external)
+                                 if s.name not in (subnet.name, "defender_subnet") and not s.external)
+                # Mirror of the attacker expansion, for the defender: every VICTIM subnet accepts ingress
+                # FROM the defender box, so the defender can reach every tier for detection/active-response
+                # without each topology hand-authoring a connection (the same authoring trap the attacker
+                # expansion avoids). Excluded: the attacker subnet (defender<->attacker stays severed) and
+                # the defender's own subnet (victims must NOT be able to initiate back to the box — no ES
+                # injection). One-way: this opens the victim's INGRESS, not the box's.
+                has_defender = any(s.name == "defender_subnet" for s in topology.get_all_subnets())
+                if has_defender and subnet.name not in ("attacker_subnet", "defender_subnet"):
+                    peers.add("defender_subnet")
                 for peer_name in peers:
                     peer = topology.get_subnet_by_name(peer_name)
                     if peer:
@@ -206,10 +217,44 @@ class NetworkDeployer:
                 description="Security group for management network",
             )
             time.sleep(1)
-            for direction in ("ingress", "egress"):
+            # The mgmt host is the bastion (it holds the floating IP) AND the telemetry relay host, so it
+            # must NOT accept ingress from the whole internet. Scope it:
+            #   - egress: open (bastion needs outbound; SNAT egress for the box's LLM calls goes via here)
+            #   - ingress tcp/22: SSH for the harness/operator jump (key-only). The one internet-facing port.
+            #   - ingress tcp/9200: the telemetry relay, east-west from the VICTIM subnets + mgmt only.
+            # (Restricting 22 to a fixed operator CIDR would be tighter still, but the harness connects
+            # from varying hosts; 22 stays key-only from anywhere while everything else is closed.)
+            # The relay carries victim DETECTION telemetry to the defender, so the attacker subnet is
+            # deliberately excluded: the attacker is what's being detected and must never be able to POST
+            # into the defender's feed (a telemetry-injection/poisoning vector). If kali telemetry is
+            # ever wanted it belongs on a separate channel, not the defender's relay.
+            try:
+                self._conn.network.create_security_group_rule(
+                    security_group_id=mgmt_sg.id, direction="egress", remote_ip_prefix="0.0.0.0/0",
+                )
+            except ConflictException:
+                pass
+            time.sleep(1)
+            try:
+                self._conn.network.create_security_group_rule(
+                    security_group_id=mgmt_sg.id, direction="ingress", protocol="tcp",
+                    port_range_min=22, port_range_max=22, remote_ip_prefix="0.0.0.0/0",
+                )
+            except ConflictException:
+                pass
+            time.sleep(1)
+            # Relay SOURCES = telemetry producers only (the victim subnets). The attacker never ships to
+            # the defender's feed, and the defender box is the SINK (the relay forwards TO its ES over the
+            # mgmt-CIDR ingress it already has) — not a source — so both are excluded here.
+            relay_sources = [self._management.cidr] + [
+                str(s.cidr) for s in topology.get_all_subnets()
+                if not s.external and s.name not in ("attacker_subnet", "defender_subnet")
+            ]
+            for prefix in relay_sources:
                 try:
                     self._conn.network.create_security_group_rule(
-                        security_group_id=mgmt_sg.id, direction=direction, remote_ip_prefix="0.0.0.0/0",
+                        security_group_id=mgmt_sg.id, direction="ingress", protocol="tcp",
+                        port_range_min=9200, port_range_max=9200, remote_ip_prefix=prefix,
                     )
                 except ConflictException:
                     pass

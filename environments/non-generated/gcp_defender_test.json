@@ -1,9 +1,9 @@
 {
- "name": "chain_2hosts_instrumented",
+ "name": "gcp_defender_test",
  "networks": [
   {
-   "name": "chain_2hosts_instrumented_network",
-   "description": "Chain of 2 hosts (instrumented: sysflow + Falco on every non-attacker host)",
+   "name": "chain_2hosts_network",
+   "description": "Chain of 2 hosts",
    "subnets": [
     {
      "name": "ring_subnet",
@@ -14,13 +14,13 @@
      "hosts": [
       {
        "name": "host0",
-       "vm_type": "ubuntu_base_instrumented",
+       "vm_type": "ubuntu_base_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.10"
       },
       {
        "name": "host1",
-       "vm_type": "ubuntu_base_instrumented",
+       "vm_type": "ubuntu_base_running",
        "flavor": "m1.small",
        "ip_address": "192.168.200.11"
       }
@@ -36,7 +36,7 @@
       {
        "name": "attacker",
        "vm_type": "kali_running",
-       "flavor": "m2.large",
+       "flavor": "m1.small",
        "ip_address": "192.168.202.100"
       }
      ]

@@ -3,5 +3,15 @@
   remote_user: root
 
   tasks:
+  # (a, sysflow half) Repoint sf-processor's ES exporter from its baked ES to the telemetry relay on
+  # the mgmt host, before sysflow starts, so sysflow ships to the relay (which routes to the box ES).
+  # Its index stays "sysflow". Companion to the falcosidekick repoint in start_defender_services.
+  - name: Repoint sysflow exporter to the telemetry relay
+    ansible.builtin.replace:
+      path: /etc/sysflow/pipelines/pipeline.local.json
+      regexp: '"es\.addresses":\s*"[^"]*"'
+      replace: '"es.addresses": "{{ telemetry_relay_addr | default("http://10.0.1.10:9200") }}"'
+    ignore_errors: yes
+
   - name: Start sysflow
     command: "sysflow start"

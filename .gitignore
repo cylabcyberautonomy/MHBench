@@ -8,3 +8,6 @@ config/config.*.yaml
 
 # Compilation
 *.qcow2
+# Local virtualenv — machine-specific, never commit (was an accidental self-referential symlink)
+.venv
+.venv/

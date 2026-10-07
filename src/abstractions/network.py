@@ -38,6 +38,12 @@ class Subnet(BaseModel):
     hosts: list[Host] = Field(default_factory=list)
     external: bool = False
     internet_egress: bool = True
+    # Declarative marker: the internet-facing / perimeter tier (e.g. the DMZ webserver segment an
+    # external attacker reaches first). PURELY informational — unlike `external` it drives NO provisioning
+    # (no public gateway, no 0.0.0.0/0 SG rule); it just lets a consumer (the arena's defender spec) know
+    # which segment is the perimeter so deception can bait the ingress path from a property the defender
+    # legitimately owns, rather than inferring the attacker's position from subnet_connections.
+    perimeter: bool = False
 
     @computed_field
     @property

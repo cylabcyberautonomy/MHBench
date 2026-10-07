@@ -227,6 +227,22 @@ class GCPBackend(CloudBackend):
                         sources.append(str(peer.cidr))
                 if self._management:
                     sources.append(self._management.cidr)
+                # Defender parity with the OpenStack network_deployer: every VICTIM subnet also accepts
+                # ingress from the defender box, so the defender can reach all tiers for detection/active-
+                # response without per-topology authoring. Excluded: the attacker subnet (defender<->attacker
+                # stays severed) and the defender's own subnet — so the box itself keeps accepting only
+                # mgmt + its own subnet here (attacker/victims can't initiate to it: isolated).
+                dsub = topology.get_subnet_by_name("defender_subnet")
+                if dsub and subnet.name not in ("attacker_subnet", "defender_subnet"):
+                    sources.append(str(dsub.cidr))
+                # Attacker-C2 parity with the OpenStack network_deployer: the C2 runs on the Kali
+                # foothold in the attacker subnet, so victims must be able to beacon to it. Open the
+                # attacker subnet's ingress from every OTHER subnet — but not the defender subnet
+                # (attacker<->defender stays severed). Without this, victim implants never reach the C2.
+                if subnet.name == "attacker_subnet":
+                    for other in topology.get_all_subnets():
+                        if other.name not in ("attacker_subnet", "defender_subnet"):
+                            sources.append(str(other.cidr))
                 self._insert_firewall(c.Firewall(
                     name=self._n(f"{subnet.name}-ingress"), network=net, direction="INGRESS", priority=1000,
                     source_ranges=sorted(set(sources)), target_tags=[tag],

@@ -3,7 +3,7 @@
  "networks": [
   {
    "name": "star_pe_instrumented_network",
-   "description": "Star topology: webservers (struts), netcat hosts, ssh-key hosts \u2014 with privesc (instrumented: sysflow + Falco on every non-attacker host)",
+   "description": "Star topology: webservers (struts), netcat hosts, ssh-key hosts — with privesc (instrumented: sysflow + Falco on every non-attacker host)",
    "subnets": [
     {
      "name": "ring_subnet",
@@ -176,6 +176,21 @@
        "vm_type": "kali_running",
        "flavor": "m2.large",
        "ip_address": "192.168.202.100"
+      }
+     ]
+    },
+    {
+     "name": "defender_subnet",
+     "cidr": "192.168.250.0/24",
+     "dns_servers": [
+      "8.8.8.8"
+     ],
+     "hosts": [
+      {
+       "name": "defender",
+       "vm_type": "ubuntu_base_running",
+       "flavor": "m2.huge",
+       "ip_address": "192.168.250.10"
       }
      ]
     }

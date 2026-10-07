@@ -1,0 +1,73 @@
+---
+# setup_telemetry_relay.yml — stand up the transparent telemetry fan-out relay on the management host.
+#
+# Runs against the management/bastion host directly (its floating IP). Ships the stdlib relay
+# (aux_files/telemetry_relay.py), a default downstreams file, and a systemd unit, then starts it.
+# Sensors bake to the constant mgmt address (management.host_ip:relay_port); the relay forwards each
+# request byte-for-byte to every entry in /etc/telemetry_relay/dests.json. Redirection/fan-out lives
+# here, not on the victims — the harness (or an operator) rewrites dests.json to re-route with no
+# victim-side change.
+#
+# Idempotent: dests.json is created only if absent (force:false) so a harness-written routing file is
+# never clobbered on a re-configure.
+
+- hosts: bastion
+  remote_user: root
+  gather_facts: false
+  vars:
+    relay_port: 9200
+    # Default downstream = the ES the *_instrumented images already bake their sensors to, so behaviour
+    # is unchanged once sensors point at the relay instead. The harness overrides this per experiment.
+    relay_es_address: "http://10.81.1.25:9200"
+
+  tasks:
+    - name: install the relay script
+      copy:
+        src: aux_files/telemetry_relay.py
+        dest: /usr/local/bin/telemetry_relay.py
+        mode: "0755"
+
+    - name: relay config directory
+      file:
+        path: /etc/telemetry_relay
+        state: directory
+        mode: "0755"
+
+    - name: default downstreams (created only if absent; harness rewrites this to re-route)
+      copy:
+        dest: /etc/telemetry_relay/dests.json
+        content: |
+          {"dests": ["{{ relay_es_address }}/"]}
+        mode: "0644"
+        force: false
+
+    - name: systemd unit
+      copy:
+        dest: /etc/systemd/system/telemetry_relay.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Transparent telemetry fan-out relay (fixed bake target)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          ExecStart=/usr/bin/python3 /usr/local/bin/telemetry_relay.py --port {{ relay_port }} --dests /etc/telemetry_relay/dests.json
+          Restart=always
+          RestartSec=2
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: enable + (re)start the relay
+      systemd:
+        name: telemetry_relay
+        state: restarted
+        enabled: true
+        daemon_reload: true
+
+    - name: wait for the relay to accept connections
+      wait_for:
+        host: 127.0.0.1
+        port: "{{ relay_port }}"
+        timeout: 20

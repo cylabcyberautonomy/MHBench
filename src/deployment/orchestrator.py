@@ -73,3 +73,32 @@ class DeploymentOrchestrator:
         self._backend.teardown_hosts(topology)
         self._backend.teardown_network(topology)
         logger.info("Teardown complete: %s", topology.name)
+
+    # -- per-host dynamic ops (arena dynamic topology interface) --------------------------------------
+    # A running defender asks the environment (via the arena) to add a decoy / rebuild a compromised host /
+    # remove one. The arena drives these through the CLI (add-host/rebuild-host/remove-host).
+    _ROLE_VM_TYPE = {"apache_vuln": "webserver_telemetry", "decoy": "ubuntu_telemetry"}
+
+    def add_host(self, topology: NetworkTopology, name: str, role: str = "decoy",
+                 subnet_name: str | None = None, flavor: str = "m1.small") -> dict:
+        """Create ONE host (a decoy) on an existing subnet; return {name, ip}. role maps to the backend
+        image (apache_vuln -> webserver, decoy -> ubuntu); an unknown role is treated as a literal vm_type."""
+        from src.abstractions.network import Host
+        vm_type = self._ROLE_VM_TYPE.get(role, role)
+        subnet = topology.get_subnet_by_name(subnet_name) if subnet_name else None
+        if subnet is None:
+            # Default to the first non-external subnet that already holds hosts (the victim plane).
+            subnet = next((s for s in topology.get_all_subnets() if s.hosts and not s.external), None)
+        if subnet is None:
+            raise RuntimeError(f"add_host: could not resolve a subnet (name={subnet_name!r})")
+        ip = self._backend.create_host(Host(name=name, vm_type=vm_type, flavor=flavor), subnet)
+        logger.info("add_host: %s (%s) on %s -> %s", name, vm_type, subnet.name, ip)
+        return {"name": name, "ip": ip}
+
+    def rebuild_host(self, topology: NetworkTopology, target: str) -> dict:
+        self._backend.rebuild_host(target)
+        return {"ok": True, "target": target}
+
+    def remove_host(self, topology: NetworkTopology, target: str) -> dict:
+        self._backend.remove_host(target)
+        return {"ok": True, "target": target}

@@ -28,6 +28,35 @@ class CloudBackend(ABC):
     #: short provider identifier, e.g. ``"openstack"`` / ``"gcp"``
     name: str = "cloud"
 
+    # -- runtime ingress (defender-requested ports) -------------------------
+
+    def add_management_ingress(self, port: int, sources: list[str]) -> None:
+        """Open tcp/<port> on the management host from <sources> (victim CIDRs). Used by
+        `request-ingress` when a defender asks the environment to forward a server-mediated port
+        (e.g. Velociraptor :8000) through the mgmt host to its box. Default: no-op — a backend whose
+        management ingress is already open (GCP's is 0.0.0.0/0) needs nothing here."""
+        import logging
+        logging.getLogger(__name__).info(
+            "add_management_ingress: no-op for backend %r (tcp/%d already reachable)", self.name, port)
+
+    # -- per-host dynamic ops (defender-driven topology mutation) ------------
+    # Single-host create/rebuild/delete for the arena's dynamic topology interface (a running defender
+    # asking the environment to add a decoy / rebuild a compromised host / remove one). NOT abstract:
+    # default to unsupported so a backend without single-host provisioning (e.g. GCP's image constraints)
+    # simply doesn't implement them and the arena surfaces EnvRequestUnsupported.
+
+    def create_host(self, host, subnet) -> str:
+        """Create ONE host on an existing topology subnet; return its fixed IP (no public IP)."""
+        raise NotImplementedError(f"{self.name} backend does not support create_host")
+
+    def rebuild_host(self, display_name: str) -> None:
+        """Rebuild one existing host from the image it booted from (restore to pristine)."""
+        raise NotImplementedError(f"{self.name} backend does not support rebuild_host")
+
+    def remove_host(self, display_name: str) -> None:
+        """Delete one existing host."""
+        raise NotImplementedError(f"{self.name} backend does not support remove_host")
+
     # -- provisioning -------------------------------------------------------
 
     @abstractmethod

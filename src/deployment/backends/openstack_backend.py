@@ -33,11 +33,39 @@ class OpenStackBackend(CloudBackend):
     def conn(self):  # exposed for callers that still want the raw SDK connection
         return self._conn
 
+    def add_management_ingress(self, port: int, sources: list[str]) -> None:
+        from openstack.exceptions import ConflictException
+        sg_name = f"{self._project_name}-management_sg" if self._project_name else "management_sg"
+        sg = self._conn.network.find_security_group(sg_name, project_id=self._conn.current_project_id)
+        if not sg:
+            logger.warning("management_sg %r not found; cannot open tcp/%d", sg_name, port)
+            return
+        for src in sources:
+            try:
+                self._conn.network.create_security_group_rule(
+                    security_group_id=sg.id, direction="ingress", protocol="tcp",
+                    port_range_min=port, port_range_max=port, remote_ip_prefix=src)
+                logger.info("management_sg: opened tcp/%d from %s", port, src)
+            except ConflictException:
+                pass
+
     def provision_network(self, topology: NetworkTopology) -> None:
         NetworkDeployer(self._conn, self._config, self._project_name).deploy(topology)
 
     def provision_hosts(self, topology: NetworkTopology) -> str | None:
         return HostDeployer(self._conn, self._config, self._online, self._project_name).deploy(topology)
+
+    def _host_deployer(self) -> HostDeployer:
+        return HostDeployer(self._conn, self._config, self._online, self._project_name)
+
+    def create_host(self, host, subnet) -> str:
+        return self._host_deployer().create_one_host(host, subnet)
+
+    def rebuild_host(self, display_name: str) -> None:
+        self._host_deployer().rebuild_one(display_name)
+
+    def remove_host(self, display_name: str) -> None:
+        self._host_deployer().delete_one(display_name)
 
     def teardown_hosts(self, topology: NetworkTopology) -> None:
         HostDeployer(self._conn, self._config, self._online, self._project_name).teardown(topology)
