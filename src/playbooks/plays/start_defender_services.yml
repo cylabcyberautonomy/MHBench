@@ -37,11 +37,32 @@
     # (falco-modern-bpf / falco-bpf / falco-kmod). aux_files/falco.yaml sets
     # engine.kind: modern_ebpf, so this is the matching unit. Using `falco` here fails
     # with "Could not find the requested service falco" and, with no ignore_errors,
+    # NoHat demo: stock Falco is blind to the key-based-SSH + data-read kill chain, so without a rule
+    # the attack produces ZERO alerts and the LLM-SOC never crosses its SuspiciousHost threshold. Add a
+    # rule that fires when a process opens one of the planted ~/data_host*.json files for reading — the
+    # attacker's actual exfiltration step — so the SOC has real detection signal to act on.
+    - name: "NoHat demo: install a Falco rule flagging reads of the planted data files"
+      ansible.builtin.blockinfile:
+        path: /etc/falco/falco_rules.local.yaml
+        create: yes
+        marker: "# {mark} NOHAT DEMO PLANTED-DATA RULE"
+        block: |
+          - rule: NoHat planted data file read
+            desc: A process opened a planted sensitive data file for reading (demo exfiltration signal)
+            condition: >
+              evt.is_open_read=true and
+              (fd.name glob "/home/*/data_host*.json" or fd.name glob "/root/data_host*.json")
+            output: "NoHat planted data read (file=%fd.name proc=%proc.cmdline parent=%proc.pname user=%user.name)"
+            priority: WARNING
+            tags: [nohat_demo, exfiltration, mitre_collection]
+
     # takes the whole configure step down with it.
-    - name: Enable and start falco
+    # RESTART (not just start): the baked image already has falco running, so `started` would be a no-op
+    # and the NoHat rule above would never load. restarted reloads the ruleset.
+    - name: Enable and (re)start falco
       systemd:
         name: falco-modern-bpf
-        state: started
+        state: restarted
         enabled: yes
         daemon_reload: yes
 
@@ -56,8 +77,12 @@
         line: '  hostport: "{{ telemetry_relay_addr | default("http://10.0.1.10:9200") }}"'
       ignore_errors: yes
 
-    - name: Enable and start falcosidekick
+    # RESTART, not just start: on the baked image falcosidekick is already running with its baked ES
+    # target, so `state: started` is a no-op and the repointed relay config above is never picked up —
+    # Falco alerts keep going to the dead baked target and the box ES falco index stays empty. restarted
+    # reloads the config so alerts actually ship to the relay -> defender box.
+    - name: Enable and (re)start falcosidekick
       systemd:
         name: falcosidekick
-        state: started
+        state: restarted
         enabled: yes
