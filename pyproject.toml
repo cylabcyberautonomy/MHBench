@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "mhbench"
 version = "0.1.0"
@@ -21,3 +25,11 @@ gcp = [
 
 [project.scripts]
 mhbench = "cli:cli"
+
+[tool.setuptools]
+py-modules = ["cli"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["config*", "src*"]
+namespaces = true
