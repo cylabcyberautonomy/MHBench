@@ -41,6 +41,12 @@
         mode: "0644"
         force: false
 
+    - name: relay trace directory (latency hop relay_received; fetched by `cli.py collect`)
+      file:
+        path: /var/log/telemetry_relay
+        state: directory
+        mode: "0755"
+
     - name: systemd unit
       copy:
         dest: /etc/systemd/system/telemetry_relay.service
@@ -52,7 +58,7 @@
           Wants=network-online.target
 
           [Service]
-          ExecStart=/usr/bin/python3 /usr/local/bin/telemetry_relay.py --port {{ relay_port }} --dests /etc/telemetry_relay/dests.json
+          ExecStart=/usr/bin/python3 /usr/local/bin/telemetry_relay.py --port {{ relay_port }} --dests /etc/telemetry_relay/dests.json --trace /var/log/telemetry_relay/trace.jsonl
           Restart=always
           RestartSec=2
 

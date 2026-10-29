@@ -1,0 +1,178 @@
+{
+  "name": "equifax_small_desktop_instrumented",
+  "networks": [
+    {
+      "name": "equifax_small_desktop_instrumented_network",
+      "description": "Equifax-inspired instrumented + desktops: 2 webservers, 4 databases, 2 XFCE workstations driven by a computer-use agent (host telemetry: sysflow + Falco)",
+      "subnets": [
+        {
+          "name": "webserver_subnet",
+          "cidr": "192.168.200.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "webserver0",
+              "vm_type": "webserver_instrumented",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.10"
+            },
+            {
+              "name": "webserver1",
+              "vm_type": "webserver_instrumented",
+              "flavor": "m1.small",
+              "ip_address": "192.168.200.11"
+            }
+          ],
+          "perimeter": true
+        },
+        {
+          "name": "corporate_subnet",
+          "cidr": "192.168.201.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "database0",
+              "vm_type": "ubuntu_base_instrumented",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.50"
+            },
+            {
+              "name": "database1",
+              "vm_type": "ubuntu_base_instrumented",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.51"
+            },
+            {
+              "name": "database2",
+              "vm_type": "ubuntu_base_instrumented",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.52"
+            },
+            {
+              "name": "database3",
+              "vm_type": "ubuntu_base_instrumented",
+              "flavor": "m1.small",
+              "ip_address": "192.168.201.53"
+            },
+            {
+              "name": "workstation0",
+              "vm_type": "workstation_instrumented",
+              "flavor": "m1.medium",
+              "ip_address": "192.168.201.20"
+            },
+            {
+              "name": "workstation1",
+              "vm_type": "workstation_instrumented",
+              "flavor": "m1.medium",
+              "ip_address": "192.168.201.21"
+            }
+          ]
+        },
+        {
+          "name": "defender_subnet",
+          "cidr": "192.168.250.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "defender",
+              "vm_type": "ubuntu_base_running",
+              "flavor": "m2.huge",
+              "ip_address": "192.168.250.10"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subnet_connections": [
+    {
+      "from_subnet": "webserver_subnet",
+      "to_subnet": "corporate_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "webserver0",
+        "host_user": "tomcat",
+        "followers": [
+          {
+            "follower": "database0",
+            "follower_user": "ubuntu"
+          },
+          {
+            "follower": "database1",
+            "follower_user": "ubuntu"
+          },
+          {
+            "follower": "database2",
+            "follower_user": "ubuntu"
+          },
+          {
+            "follower": "database3",
+            "follower_user": "ubuntu"
+          }
+        ]
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "workstation0",
+        "host_user": "ubuntu",
+        "followers": [
+          {
+            "follower": "webserver0",
+            "follower_user": "ubuntu"
+          },
+          {
+            "follower": "webserver1",
+            "follower_user": "ubuntu"
+          }
+        ]
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database0",
+        "host_user": "ubuntu",
+        "path": "~/data_database_0.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database1",
+        "host_user": "ubuntu",
+        "path": "~/data_database_1.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database2",
+        "host_user": "ubuntu",
+        "path": "~/data_database_2.json"
+      }
+    },
+    {
+      "name": "add_data",
+      "args": {
+        "host": "database3",
+        "host_user": "ubuntu",
+        "path": "~/data_database_3.json"
+      }
+    }
+  ]
+}

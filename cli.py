@@ -438,7 +438,33 @@ def collect(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str | No
 
     click.echo(f"Collecting host logs for '{topology.name}' -> {dest}...")
     orchestrator.collect(topology, mgmt_ip, str(dest))
+    _collect_management(mgmt_ip, config.ssh_key_path, dest)
     click.echo("Collection complete.")
+
+
+def _collect_management(mgmt_ip: str, ssh_key: str, dest: Path) -> None:
+    """Best-effort: the management host's telemetry-relay trace (latency hop relay_received) and a clock
+    offset sample, into <dest>/management/. The relay is the one hop every sensor record crosses on its
+    way to the defender box, so its trace is part of the ground truth."""
+    import json, time
+    mdir = Path(dest) / "management"
+    try:
+        mdir.mkdir(parents=True, exist_ok=True)
+        r = _mgmt_ssh(mgmt_ip, ssh_key, "cat /var/log/telemetry_relay/trace.jsonl 2>/dev/null || true")
+        if r.returncode == 0 and r.stdout:
+            (mdir / "telemetry_relay_trace.jsonl").write_text(r.stdout)
+        before = time.time()
+        r = _mgmt_ssh(mgmt_ip, ssh_key, "date +%s.%N")
+        after = time.time()
+        if r.returncode == 0 and r.stdout.strip():
+            host_time = float(r.stdout.strip())
+            (mdir / "clock_offset.json").write_text(json.dumps({
+                "host": "management", "controller_before": before, "host_time": host_time,
+                "controller_after": after, "offset_seconds": host_time - (before + after) / 2,
+                "round_trip_seconds": after - before}, indent=2) + "\n")
+        click.echo(f"management-host trace + clock offset -> {mdir}")
+    except Exception as e:  # noqa: BLE001 — never fail collection over the mgmt extras
+        click.echo(f"management-host collection skipped: {e}")
 
 
 # ---------------------------------------------------------------------------

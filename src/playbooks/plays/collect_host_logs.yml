@@ -60,6 +60,35 @@
       loop_control:
         label: "{{ item.name }}"
 
+    # Clock offset sample: controller time before and after reading the host clock. The scorer uses
+    # offset = host - midpoint to put host-stamped telemetry on the controller's clock when it joins
+    # it with the defender's stamps. Half the ssh round trip bounds the error.
+    - name: Controller time before reading the host clock
+      ansible.builtin.set_fact:
+        _clk_before: "{{ lookup('pipe', 'date +%s.%N') }}"
+
+    - name: Read the host clock
+      ansible.builtin.command: date +%s.%N
+      register: _clk_host
+      changed_when: false
+      failed_when: false
+
+    - name: Controller time after reading the host clock
+      ansible.builtin.set_fact:
+        _clk_after: "{{ lookup('pipe', 'date +%s.%N') }}"
+
+    - name: Save the clock offset sample to <dest>/<host>/clock_offset.json
+      ansible.builtin.copy:
+        dest: "{{ dest }}/{{ inventory_hostname }}/clock_offset.json"
+        content: "{{ {'host': inventory_hostname,
+                      'controller_before': _clk_before | float,
+                      'host_time': _clk_host.stdout | float,
+                      'controller_after': _clk_after | float,
+                      'offset_seconds': (_clk_host.stdout | float) - (((_clk_before | float) + (_clk_after | float)) / 2),
+                      'round_trip_seconds': (_clk_after | float) - (_clk_before | float)} | to_nice_json }}\n"
+      delegate_to: localhost
+      when: _clk_host.rc is defined and _clk_host.rc == 0
+
     - name: Fetch every log file to <dest>/<host>/<basename>
       ansible.builtin.fetch:
         src: "{{ item }}"

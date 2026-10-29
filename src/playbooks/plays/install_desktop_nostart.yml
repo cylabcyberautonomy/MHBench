@@ -1,0 +1,137 @@
+---
+# Bake-time: a headless XFCE desktop on a virtual display, driven later by a computer-use agent
+# (dev-arena's persona_traffic `computer_use` generator) over SSH with xdotool. Network-independent:
+# installs software and two DISABLED units; start_desktop.yml enables them once the VM is deployed.
+#
+#   xvfb.service     Xvfb :1 (1280x800) owned by the desktop user
+#   desktop.service  the XFCE session on :1, as the desktop user
+#
+# Applications: a browser (Firefox ESR from the Mozilla team PPA, a real .deb rather than the snap,
+# which does not run under a plain Xvfb session), a terminal, a text editor, a file manager and
+# LibreOffice Calc. The agent reaches the wider network through them: the browser to the web tier,
+# the terminal to SSH into other hosts.
+- hosts: "{{ host }}"
+  remote_user: root
+  vars:
+    desktop_user: ubuntu
+    desktop_display: ":1"
+    desktop_geometry: "1280x800x24"
+    desktop_office: true
+  tasks:
+    - name: Add the Mozilla team PPA (Firefox ESR as a .deb)
+      apt_repository:
+        repo: ppa:mozillateam/ppa
+        state: present
+        update_cache: yes
+
+    - name: Prefer the PPA's Firefox over the snap transition package
+      copy:
+        dest: /etc/apt/preferences.d/mozillateam-firefox
+        mode: "0644"
+        content: |
+          Package: firefox*
+          Pin: release o=LP-PPA-mozillateam
+          Pin-Priority: 1001
+
+          Package: firefox*
+          Pin: release o=Ubuntu
+          Pin-Priority: -1
+
+    - name: Install the desktop, the display server and the automation tools
+      apt:
+        pkg:
+          - xvfb
+          - dbus-x11
+          - xfce4-session
+          - xfce4-panel
+          - xfwm4
+          - xfdesktop4
+          - xfce4-terminal
+          - thunar
+          - mousepad
+          - xdotool
+          - scrot
+          - x11-utils
+          - x11vnc
+          - firefox-esr
+          - fonts-dejavu
+        state: present
+        update_cache: yes
+
+    - name: Install LibreOffice Calc
+      when: desktop_office | bool
+      apt:
+        pkg:
+          - libreoffice-calc
+          - libreoffice-gtk3
+        state: present
+
+    - name: Ensure the Firefox policies directory exists
+      file:
+        path: /etc/firefox-esr/policies
+        state: directory
+        mode: "0755"
+
+    - name: Silence Firefox first-run, update and telemetry prompts (enterprise policies)
+      copy:
+        dest: /etc/firefox-esr/policies/policies.json
+        mode: "0644"
+        content: |
+          {"policies": {"DisableAppUpdate": true, "DisableTelemetry": true, "DisableFirefoxStudies": true,
+                        "OverrideFirstRunPage": "", "OverridePostUpdatePage": "", "DontCheckDefaultBrowser": true,
+                        "NoDefaultBookmarks": true, "DisplayBookmarksToolbar": "never",
+                        "Homepage": {"URL": "about:blank", "StartPage": "none"}}}
+
+    - name: Xvfb unit (disabled)
+      copy:
+        dest: /etc/systemd/system/xvfb.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Virtual X display {{ desktop_display }} for the desktop session
+          After=network.target
+
+          [Service]
+          Type=simple
+          User={{ desktop_user }}
+          ExecStart=/usr/bin/Xvfb {{ desktop_display }} -screen 0 {{ desktop_geometry }} -nolisten tcp -ac
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Desktop session unit (disabled)
+      copy:
+        dest: /etc/systemd/system/desktop.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=XFCE desktop session on {{ desktop_display }}
+          After=xvfb.service
+          Requires=xvfb.service
+
+          [Service]
+          Type=simple
+          User={{ desktop_user }}
+          Environment=DISPLAY={{ desktop_display }}
+          Environment=HOME=/home/{{ desktop_user }}
+          Environment=XDG_RUNTIME_DIR=/run/user/1000
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do xdpyinfo -display {{ desktop_display }} >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
+          ExecStart=/usr/bin/dbus-launch --exit-with-session /usr/bin/xfce4-session
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Keep both units disabled at bake time
+      systemd:
+        name: "{{ item }}"
+        enabled: no
+        daemon_reload: yes
+      loop: [xvfb.service, desktop.service]
+
+    - name: Record the display for tools that drive this desktop
+      copy:
+        dest: /etc/desktop-display
+        mode: "0644"
+        content: "{{ desktop_display }}\n"

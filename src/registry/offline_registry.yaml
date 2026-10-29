@@ -63,3 +63,9 @@
   - install_filebeat_nostart
   disk_size_gb: 16
   location: src/compilation/images/sensor.qcow2
+- name: workstation_telemetry
+  parent: ubuntu_telemetry
+  playbooks:
+  - install_desktop_nostart
+  disk_size_gb: 20
+  location: src/compilation/images/workstation_telemetry.qcow2

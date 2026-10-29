@@ -13,20 +13,44 @@ downstreams for one source; multi-stream routing = one relay per source port.
   each dest and returns 200 to the sensor as long as at least one dest accepted (best-effort fan-out;
   a slow/dead dest never blocks the sensor).
 
-Usage: telemetry_relay.py --port 9200 --dests /etc/telemetry_relay/dests.json
+Usage: telemetry_relay.py --port 9200 --dests /etc/telemetry_relay/dests.json [--trace /var/log/telemetry_relay/trace.jsonl]
+
+Latency hop `relay_received`: with --trace, every forwarded request appends one JSON line {ts, hop,
+method, path, bytes, lines, status, forwarded_ts}. `lines` is the raw newline count of the body (an ES
+bulk carries two lines per document), so the scorer can join a batch to the documents it carried by
+their @timestamp range without the relay ever parsing a payload.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+import threading
 import urllib.error
+from datetime import datetime, timezone
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 _HOP_BY_HOP = {"content-length", "transfer-encoding", "connection", "keep-alive"}
 
 _DESTS_PATH = "/etc/telemetry_relay/dests.json"
+_TRACE_PATH = None  # set by --trace; None = no trace
+_TRACE_LOCK = threading.Lock()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
+def _trace(row: dict) -> None:
+    if not _TRACE_PATH:
+        return
+    try:
+        with _TRACE_LOCK:
+            with open(_TRACE_PATH, "a") as f:
+                f.write(json.dumps(row) + "\n")
+    except Exception:  # the trace never blocks forwarding
+        pass
 
 
 def _load_dests() -> list[str]:
@@ -46,6 +70,7 @@ class _Relay(BaseHTTPRequestHandler):
         (fire-and-forget). Returning the real response — including headers like X-Elastic-Product — is
         what lets a proper ES client (sf-processor's go-elasticsearch, which does a product-check GET /)
         work through the relay, not just a header-agnostic shipper like falcosidekick."""
+        received_ts = _now_iso()
         length = int(self.headers.get("Content-Length", 0) or 0)
         body = self.rfile.read(length) if length else b""
         data = body if self.command in ("POST", "PUT") else None
@@ -68,6 +93,9 @@ class _Relay(BaseHTTPRequestHandler):
             except Exception:
                 if i == 0:
                     primary = None  # dead/unreachable primary -> 502 below (extra dests never block)
+        _trace({"ts": received_ts, "hop": "relay_received", "method": self.command, "path": self.path,
+                "bytes": len(body), "lines": body.count(b"\n"),
+                "status": primary[0] if primary is not None else 502, "forwarded_ts": _now_iso()})
         if primary is not None:
             status, rbody, rheaders = primary
             self.send_response(status)
@@ -105,12 +133,14 @@ class _Relay(BaseHTTPRequestHandler):
 
 
 def main():
-    global _DESTS_PATH
+    global _DESTS_PATH, _TRACE_PATH
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=9200)
     ap.add_argument("--dests", default=_DESTS_PATH)
+    ap.add_argument("--trace", default=None, help="append one JSON line per forwarded request here")
     args = ap.parse_args()
     _DESTS_PATH = args.dests
+    _TRACE_PATH = args.trace
     srv = ThreadingHTTPServer(("0.0.0.0", args.port), _Relay)
     print(f"telemetry_relay listening on :{args.port}, dests <- {_DESTS_PATH}", flush=True)
     srv.serve_forever()

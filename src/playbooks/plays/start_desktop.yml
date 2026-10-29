@@ -1,0 +1,21 @@
+---
+# Online: start the virtual display + XFCE session baked by install_desktop_nostart.yml, and wait until
+# the display answers, so a computer-use agent can drive it as soon as the host is configured.
+- hosts: "{{ host }}"
+  remote_user: root
+  tasks:
+    - name: Enable + start the virtual display and the desktop session
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      loop: [xvfb.service, desktop.service]
+
+    - name: Wait for the display to answer
+      command: xdpyinfo -display :1
+      register: _disp
+      until: _disp.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false

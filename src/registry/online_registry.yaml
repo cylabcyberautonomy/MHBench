@@ -211,3 +211,12 @@
   parent: kali_base
   playbooks:
   location: null
+
+- name: workstation_instrumented
+  parent: workstation_telemetry
+  playbooks:
+  - start_desktop
+  - start_sysflow
+  - start_defender_services
+  - install_auditd_offline
+  location: null
