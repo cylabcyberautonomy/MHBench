@@ -17,7 +17,7 @@
       args:
         executable: /bin/bash
 
-    - name: Rotate auditd (SIGUSR1) and drop the rotated-out pre-attack log
+    - name: Rotate auditd (SIGUSR1) and drop the rotated-out pre-run log
       ansible.builtin.shell: |
         pkill -USR1 -x auditd || true
         sleep 2

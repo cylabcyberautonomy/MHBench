@@ -8,7 +8,7 @@
 # /etc/audit/audit.rules
 #
 # Maintained by Nextron Systems (https://www.nextron-systems.com)
-# Modified for DISSECT / MHBench attack-agent telemetry.
+# Modified for DISSECT / MHBench host telemetry.
 #
 # DISSECT changes are marked  ## >>> ADDED  /  ## >>> CHANGED  /  ## >>> REMOVED.
 # Rationale for all of them, in one line: the stock ruleset is tuned for a

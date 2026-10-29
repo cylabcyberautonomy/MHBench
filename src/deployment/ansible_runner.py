@@ -621,7 +621,7 @@ class AnsibleRunner:
         project_dir = str((_MHBENCH_DIR / pb_path).resolve().parent)
         # Retry collection IN PLACE (VMs are still up), each pass re-fetching ONLY the hosts whose
         # <dest>/<host>/ is still empty — a host that already returned its logs is never re-copied, and a
-        # transient bastion drop no longer costs the whole experiment a re-attack. Best-effort: after the
+        # transient bastion drop no longer costs the whole experiment a re-run. Best-effort: after the
         # retries, proceed to teardown with a loud warning for any host that never returned logs, instead of
         # raising (which would escalate to a full-experiment retry).
         pending = dict(inventory_hosts)
