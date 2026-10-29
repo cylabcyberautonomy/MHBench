@@ -73,6 +73,21 @@
           ]
         },
         {
+          "name": "attacker_subnet",
+          "cidr": "192.168.202.0/24",
+          "dns_servers": [
+            "8.8.8.8"
+          ],
+          "hosts": [
+            {
+              "name": "attacker",
+              "vm_type": "kali_running",
+              "flavor": "m2.large",
+              "ip_address": "192.168.202.100"
+            }
+          ]
+        },
+        {
           "name": "defender_subnet",
           "cidr": "192.168.250.0/24",
           "dns_servers": [
@@ -94,6 +109,13 @@
     {
       "from_subnet": "webserver_subnet",
       "to_subnet": "corporate_subnet",
+      "protocol": null,
+      "ports": null,
+      "bidirectional": true
+    },
+    {
+      "from_subnet": "webserver_subnet",
+      "to_subnet": "attacker_subnet",
       "protocol": null,
       "ports": null,
       "bidirectional": true
@@ -120,23 +142,6 @@
           },
           {
             "follower": "database3",
-            "follower_user": "ubuntu"
-          }
-        ]
-      }
-    },
-    {
-      "name": "setup_ssh_keys",
-      "args": {
-        "host": "workstation0",
-        "host_user": "ubuntu",
-        "followers": [
-          {
-            "follower": "webserver0",
-            "follower_user": "ubuntu"
-          },
-          {
-            "follower": "webserver1",
             "follower_user": "ubuntu"
           }
         ]
@@ -172,6 +177,23 @@
         "host": "database3",
         "host_user": "ubuntu",
         "path": "~/data_database_3.json"
+      }
+    },
+    {
+      "name": "setup_ssh_keys",
+      "args": {
+        "host": "workstation0",
+        "host_user": "ubuntu",
+        "followers": [
+          {
+            "follower": "webserver0",
+            "follower_user": "ubuntu"
+          },
+          {
+            "follower": "webserver1",
+            "follower_user": "ubuntu"
+          }
+        ]
       }
     }
   ]
