@@ -1,0 +1,36 @@
+---
+# Bake-time play for the dedicated attacker Kali profile.
+#
+# The isolated attacker subnet has no internet egress, so the container engine
+# and the Metasploit Python client must be baked here, where the image compiler
+# has network access. No service is started that depends on the live topology.
+- hosts: "{{ host }}"
+  become: true
+
+  tasks:
+    - name: Install the container engine
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Install the Metasploit Python client
+      ansible.builtin.pip:
+        name: pymetasploit3
+        extra_args: --break-system-packages
+
+    - name: Verify the Docker daemon
+      ansible.builtin.command:
+        argv: [docker, info]
+      changed_when: false
+
+    - name: Verify the Metasploit Python client
+      ansible.builtin.command:
+        argv: [python3, -c, "import pymetasploit3"]
+      changed_when: false

@@ -7,6 +7,7 @@ from src.abstractions.network import NetworkTopology
 from src.deployment.ansible_runner import AnsibleRunner
 from src.deployment.backends.base import CloudBackend
 from src.deployment.online_registry_service import OnlineRegistryService
+from src.deployment.spec_parsers import JsonSpecParser
 from src.playbooks.playbook_registry_service import PlaybookRegistryService
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,17 @@ class DeploymentOrchestrator:
     def _ansible(self) -> AnsibleRunner:
         return AnsibleRunner(self._config, self._online, self._playbook_registry, self._backend, self._project_name)
 
+    def _validate_routing(self, topology: NetworkTopology) -> None:
+        if topology.routing is None:
+            return
+        if self._backend.name != "openstack":
+            raise NotImplementedError(f"BGP routing is not supported by {self._backend.name}.")
+        errors = JsonSpecParser.validate_config(topology, self._config)
+        if errors:
+            raise ValueError("; ".join(errors))
+
     def provision(self, topology: NetworkTopology) -> str | None:
+        self._validate_routing(topology)
         logger.info("Provisioning topology: %s", topology.name)
         self._backend.provision_network(topology)
         mgmt_floating_ip = self._backend.provision_hosts(topology)
@@ -39,6 +50,9 @@ class DeploymentOrchestrator:
         return mgmt_floating_ip
 
     def configure(self, topology: NetworkTopology, mgmt_floating_ip: str | None) -> None:
+        self._validate_routing(topology)
+        if topology.routing is not None and mgmt_floating_ip is None:
+            raise ValueError("BGP configuration requires a management IP.")
         if mgmt_floating_ip is None:
             logger.info("No management host; skipping Ansible for %s", topology.name)
             return
@@ -83,6 +97,8 @@ class DeploymentOrchestrator:
                  subnet_name: str | None = None, flavor: str = "m1.small") -> dict:
         """Create ONE host (a decoy) on an existing subnet; return {name, ip}. role maps to the backend
         image (apache_vuln -> webserver, decoy -> ubuntu); an unknown role is treated as a literal vm_type."""
+        if topology.routing is not None:
+            raise NotImplementedError("Dynamic host operations are not supported for BGP environments.")
         from src.abstractions.network import Host
         vm_type = self._ROLE_VM_TYPE.get(role, role)
         subnet = topology.get_subnet_by_name(subnet_name) if subnet_name else None
@@ -96,9 +112,13 @@ class DeploymentOrchestrator:
         return {"name": name, "ip": ip}
 
     def rebuild_host(self, topology: NetworkTopology, target: str) -> dict:
+        if topology.routing is not None:
+            raise NotImplementedError("Dynamic host operations are not supported for BGP environments.")
         self._backend.rebuild_host(target)
         return {"ok": True, "target": target}
 
     def remove_host(self, topology: NetworkTopology, target: str) -> dict:
+        if topology.routing is not None:
+            raise NotImplementedError("Dynamic host operations are not supported for BGP environments.")
         self._backend.remove_host(target)
         return {"ok": True, "target": target}

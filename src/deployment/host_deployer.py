@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+from ipaddress import IPv4Network
 import os
 import subprocess
 import tempfile
@@ -14,6 +15,7 @@ from openstack import exceptions as sdk_exceptions
 from config.config import Config
 from src.abstractions.network import Host, NetworkTopology, Subnet
 from src.deployment.online_registry_service import OnlineRegistryService
+from src.deployment.spec_parsers import JsonSpecParser
 
 import re
 
@@ -43,6 +45,8 @@ class HostDeployer:
 
     def __init__(self, conn: Connection, config: Config, online_registry: OnlineRegistryService, project_name: str | None = None) -> None:
         self._conn = conn
+        self._config = config
+        self._external_network = config.openstack.external_network or "external"
         self._project_id = conn.current_project_id
         self._ssh_key_name = config.openstack.keypair_name
         self._management = config.management
@@ -95,6 +99,9 @@ class HostDeployer:
         logger.info("\n".join(lines))
 
     def deploy(self, topology: NetworkTopology) -> str | None:
+        errors = JsonSpecParser.validate_config(topology, self._config)
+        if errors:
+            raise ValueError("; ".join(errors))
         mgmt_floating_ip: str | None = None
 
         if self._management:
@@ -134,9 +141,9 @@ class HostDeployer:
                 elif current.status == "ERROR":
                     raise RuntimeError(f"'{self._n('management_host')}' entered ERROR: {getattr(current, 'fault', 'unknown')}")
 
-            ext_net = self._conn.network.find_network("external")
+            ext_net = self._conn.network.find_network(self._external_network)
             if not ext_net:
-                raise RuntimeError("External network 'external' not found.")
+                raise RuntimeError(f"External network {self._external_network!r} not found.")
             time.sleep(1)
             fip = self._conn.network.create_ip(floating_network_id=ext_net.id)
             time.sleep(1)
@@ -199,9 +206,21 @@ class HostDeployer:
                     key_name=self._ssh_key_name,
                     config_drive=True,  # metadata+network_data off the attached ISO, not the neutron metadata/DHCP agents (concurrency ceiling)
                 )
+                if topology.routing is not None:
+                    create_kwargs["networks"] = self._routing_nics(topology, host)
+                    create_kwargs.pop("security_groups")
+                    create_kwargs["metadata"] = {"mhbench_routing": "true"}
                 logger.info("Submitting: %s  image=%s  flavor=%s", self._n(host.name), image.name, flavor.name)
                 time.sleep(1)
-                server = self._conn.compute.create_server(**create_kwargs)  # kept for recreate-on-ERROR
+                try:
+                    server = self._conn.compute.create_server(**create_kwargs)  # kept for recreate-on-ERROR
+                except Exception:
+                    if topology.routing is not None:
+                        for nic in create_kwargs["networks"]:
+                            port = self._conn.network.find_port(nic["port"])
+                            if port is not None and not port.device_id:
+                                self._conn.network.delete_port(port.id)
+                    raise
                 pending[server.id] = (host, flavor, image, create_kwargs)
 
             deadline = time.monotonic() + _DEPLOY_TIMEOUT
@@ -225,10 +244,14 @@ class HostDeployer:
                         vm_retries[host.name] = n + 1
                         logger.warning("Instance '%s' entered ERROR (%s) — recreating (attempt %d/%d)",
                                        host.name, getattr(current, "fault", "unknown"), n + 1, _VM_CREATE_RETRIES)
-                        try:
+                        if topology.routing is not None:
                             self._conn.compute.delete_server(server_id)
-                        except Exception:
-                            logger.exception("Failed deleting errored server for '%s' before recreate", host.name)
+                            self._conn.compute.wait_for_delete(current, wait=_DELETE_TIMEOUT, interval=_POLL_INTERVAL)
+                        else:
+                            try:
+                                self._conn.compute.delete_server(server_id)
+                            except Exception:
+                                logger.exception("Failed deleting errored server for '%s' before recreate", host.name)
                         time.sleep(1)
                         new = self._conn.compute.create_server(**create_kwargs)
                         recreated.append((server_id, new.id, (host, flavor, image, create_kwargs)))
@@ -239,6 +262,87 @@ class HostDeployer:
                     pending[new_id] = val
 
         return mgmt_floating_ip
+
+    def _routing_nics(self, topology: NetworkTopology, host: Host) -> list[dict]:
+        primary = topology.get_subnet_for_host(host)
+        attachments = [(primary.name, host.ip_address, [])]
+        attachments += [(i.subnet, i.ip_address, i.response_prefixes) for i in host.extra_interfaces]
+        is_router = host.name in {r.host for r in topology.routing.routers}
+        ports = []
+        try:
+            for index, (name, ip, prefixes) in enumerate(attachments):
+                network = self._conn.network.find_network(self._n(name), project_id=self._project_id)
+                subnet = self._conn.network.find_subnet(self._n(f"{name}-subnet"), project_id=self._project_id)
+                if network is None or subnet is None:
+                    raise RuntimeError(f"Routing network/subnet {name!r} is missing.")
+                forwarding_port = is_router and index > 0
+                groups = []
+                if not forwarding_port:
+                    sg = self._conn.network.find_security_group(self._n(f"{name}_sg"), project_id=self._project_id)
+                    if sg is None:
+                        raise RuntimeError(f"Routing security group for {name!r} is missing.")
+                    groups = [sg.id]
+                extra = {}
+                if prefixes:
+                    extra["allowed_address_pairs"] = [{"ip_address": str(p)} for p in prefixes]
+                port = self._conn.network.create_port(
+                    name=self._n(f"{host.name}-nic-{index}"), network_id=network.id,
+                    fixed_ips=[{"subnet_id": subnet.id, "ip_address": str(ip)}],
+                    is_port_security_enabled=not forwarding_port, security_group_ids=groups, **extra,
+                )
+                ports.append(port)
+        except Exception:
+            for port in ports:
+                self._conn.network.delete_port(port.id)
+            raise
+        return [{"port": p.id} for p in ports]
+
+    def routing_interfaces(self, topology: NetworkTopology) -> dict[str, dict]:
+        result = {}
+        routers = {r.host for r in topology.routing.routers}
+        participants = routers | {g.host for g in topology.routing.host_gateways}
+        for host in topology.get_all_hosts():
+            if host.name not in participants:
+                continue
+            server = self._conn.compute.find_server(self._n(host.name))
+            if server is None:
+                raise RuntimeError(f"Routing host {host.name!r} is missing.")
+            ports = list(self._conn.network.ports(device_id=server.id, project_id=self._project_id))
+            primary = topology.get_subnet_for_host(host)
+            attachments = [(primary.name, host.ip_address, [])]
+            attachments += [(i.subnet, i.ip_address, i.response_prefixes) for i in host.extra_interfaces]
+            macs = {}
+            for index, (name, ip, prefixes) in enumerate(attachments):
+                subnet = self._conn.network.find_subnet(self._n(f"{name}-subnet"), project_id=self._project_id)
+                if subnet is None:
+                    raise RuntimeError(f"Routing subnet {name!r} is missing.")
+                matches = [p for p in ports if any(
+                    f.get("subnet_id") == subnet.id and f.get("ip_address") == str(ip)
+                    for f in p.fixed_ips)]
+                if len(matches) != 1 or not matches[0].mac_address:
+                    raise RuntimeError(f"Host {host.name!r}: expected one port with {ip} on {name!r}.")
+                port = matches[0]
+                pairs = {(IPv4Network(p["ip_address"]), p["mac_address"].lower())
+                         for p in port.allowed_address_pairs or []}
+                expected_pairs = {(p, port.mac_address.lower()) for p in prefixes}
+                if pairs != expected_pairs:
+                    raise RuntimeError(f"Host {host.name!r}: response addresses do not match the topology.")
+                forwarding_port = host.name in routers and index > 0
+                if port.is_port_security_enabled != (not forwarding_port):
+                    raise RuntimeError(f"Host {host.name!r}: port security does not match its interface role.")
+                if forwarding_port and port.security_group_ids:
+                    raise RuntimeError("Router data ports must not have security groups.")
+                if not forwarding_port:
+                    sg = self._conn.network.find_security_group(self._n(f"{name}_sg"), project_id=self._project_id)
+                    if sg is None or set(port.security_group_ids) != {sg.id}:
+                        raise RuntimeError(f"Host {host.name!r}: interface security groups do not match the topology.")
+                macs[name] = port.mac_address
+                if index == 0:
+                    if not subnet.gateway_ip:
+                        raise RuntimeError("Control subnet needs its Neutron gateway.")
+                    gateway = subnet.gateway_ip
+            result[host.name] = {"macs": macs, "control_gateway": gateway}
+        return result
 
     def _console_host_key(self, server) -> str | None:
         deadline = time.monotonic() + _CONSOLE_KEY_TIMEOUT
@@ -380,6 +484,8 @@ class HostDeployer:
         for host in topology.get_all_hosts():
             matches = list(self._conn.compute.servers(name=self._n(host.name), project_id=self._project_id))
             for server in matches:
+                if topology.routing is not None and server.name != self._n(host.name):
+                    continue
                 if self._delete_server(server.id, self._n(host.name)):
                     pending[server.id] = self._n(host.name)
 
@@ -391,6 +497,18 @@ class HostDeployer:
             gone = [sid for sid in pending if self._conn.compute.find_server(sid) is None]
             for sid in gone:
                 logger.info("Deleted: %s", pending.pop(sid))
+
+        if topology.routing is not None:
+            for host in topology.get_all_hosts():
+                for index in range(1 + len(host.extra_interfaces)):
+                    name = self._n(f"{host.name}-nic-{index}")
+                    for port in self._conn.network.ports(name=name, project_id=self._project_id):
+                        if port.name != name:
+                            continue
+                        if port.device_id:
+                            raise RuntimeError(f"Routing port {name!r} is still attached; retry teardown after VM deletion.")
+                        self._conn.network.delete_port(port.id)
+                        logger.info("Deleted routing port: %s", name)
 
     # --- per-host dynamic ops (defender-driven, during the run) ------------------------------------
     # Single-host create/rebuild/delete for the arena's dynamic topology-mutation interface (add/rebuild/
@@ -406,6 +524,8 @@ class HostDeployer:
     def create_one_host(self, host: Host, subnet: Subnet) -> str:
         """Create ONE host (e.g. a decoy) outside the batch deploy; wait ACTIVE; return its fixed IP.
         Mirrors deploy()'s per-host block for a single VM. ip_address unset -> OpenStack auto-assigns."""
+        if host.extra_interfaces:
+            raise NotImplementedError("Dynamic multi-NIC hosts are not supported.")
         base_image_name = self._online.get_base_image(host.vm_type)
         image = self._conn.image.find_image(base_image_name)
         if not image:
@@ -456,6 +576,8 @@ class HostDeployer:
     def rebuild_one(self, display_name: str) -> None:
         """Rebuild one existing host from the image it booted from (restore to pristine)."""
         server = self._find_one(display_name)
+        if server is not None and (server.metadata or {}).get("mhbench_routing") == "true":
+            raise NotImplementedError("Dynamic host operations are not supported for BGP environments.")
         if not server:
             raise RuntimeError(f"Server '{self._n(display_name)}' not found for rebuild.")
         image_id = server.image.get("id") if isinstance(server.image, dict) else getattr(server, "image_id", None)
@@ -477,6 +599,8 @@ class HostDeployer:
     def delete_one(self, display_name: str) -> None:
         """Delete one existing host (tolerating one already gone); wait until it's really gone."""
         server = self._find_one(display_name)
+        if server is not None and (server.metadata or {}).get("mhbench_routing") == "true":
+            raise NotImplementedError("Dynamic host operations are not supported for BGP environments.")
         if not server:
             logger.info("delete_one: '%s' already gone", self._n(display_name))
             return

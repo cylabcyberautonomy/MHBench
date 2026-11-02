@@ -31,13 +31,11 @@ class CloudBackend(ABC):
     # -- runtime ingress (defender-requested ports) -------------------------
 
     def add_management_ingress(self, port: int, sources: list[str]) -> None:
-        """Open tcp/<port> on the management host from <sources> (victim CIDRs). Used by
-        `request-ingress` when a defender asks the environment to forward a server-mediated port
-        (e.g. Velociraptor :8000) through the mgmt host to its box. Default: no-op — a backend whose
-        management ingress is already open (GCP's is 0.0.0.0/0) needs nothing here."""
-        import logging
-        logging.getLogger(__name__).info(
-            "add_management_ingress: no-op for backend %r (tcp/%d already reachable)", self.name, port)
+        """Open tcp/<port> on the management host from the supplied victim CIDRs.
+
+        Used by `request-ingress` to forward a defender-requested port through the bastion.
+        """
+        raise NotImplementedError(f"{self.name} backend does not support management ingress")
 
     # -- per-host dynamic ops (defender-driven topology mutation) ------------
     # Single-host create/rebuild/delete for the arena's dynamic topology interface (a running defender
@@ -75,6 +73,10 @@ class CloudBackend(ABC):
     @abstractmethod
     def teardown_network(self, topology: NetworkTopology) -> None:
         """Delete the networks, subnets, routing and firewalling for ``topology``."""
+
+    def routing_interfaces(self, topology: NetworkTopology) -> dict[str, dict]:
+        """Return actual interface MACs and control gateways for routed guest configuration."""
+        raise NotImplementedError(f"{self.name} backend does not support BGP routing")
 
     # -- Ansible support ----------------------------------------------------
 

@@ -1,5 +1,7 @@
 # Instrumented Environments — Handoff
 
+Historical deployment record from September 2026; the state and next actions below describe those runs. For current setup, use [README.md](README.md). Credential values have been redacted during documentation review; recorded measurements and results are otherwise unchanged.
+
 **Date:** 2026-09-07, updated 2026-09-09
 **Repo:** `/home/lakshmi/MHBench` (remote `cylabcyberautonomy/MHBench`, branch `main`)
 **Bake host:** `beluga1` (`10.81.1.1`), working copy at `/home/lakshmi/MHBench-instrumented`
@@ -46,7 +48,7 @@ Closes out §6 next-actions 1–3 from the original handoff below:
 
 **Still open** (§6 next-actions 4–5, unchanged, deferred by request):
 - Decide whether sysflow is worth keeping at all vs. relying on Falco alone.
-- Move ES address/credentials into `config.yaml` and rotate the `changeme` password.
+- Move ES address/credentials into `config.yaml` and rotate the `[redacted]` password.
 
 **Not committed this pass** (still the pre-existing "not mine" residual diffs, same as
 2026-09-07): `cli.py` (collect docstring), `src/deployment/ansible_runner.py` (stale-master
@@ -124,7 +126,7 @@ The `*_running` entries are untouched and still resolve to clean `ubuntu_base` /
 |---|---|---|
 | `start_defender_services.yml` | `name: falco` → `name: falco-modern-bpf` | **No `falco.service` unit exists.** The deb ships driver-named units. Task has no `ignore_errors`, so this killed `configure` on the first instrumented host. |
 | `install_falco_nostart.yml` | appended explicit disable/stop loop | The falco deb enables its unit via systemd preset, so "nostart" did not hold. Confirmed: the disable task reports `changed` on `falco-modern-bpf`. |
-| `install_falco_nostart.yml` | `https://` → `http://`, password → `changeme` | See §3. |
+| `install_falco_nostart.yml` | `https://` → `http://`, password corrected | See §3. |
 | `install_filebeat_nostart.yml` | same | |
 | `aux_files/pipeline.local.json` | same | sysflow's ES exporter had the identical bug. |
 | `install_sysflow_nostart.yml` | sfcollector `0.5.0`→`0.8.0`; sfprocessor stays `0.5.0`; `dpkg -i --force-overwrite`; new tasks setting `DRIVER_TYPE=ebpf-core` and a systemd drop-in | See §4. |
@@ -142,18 +144,13 @@ Telemetry had **never** reached Elasticsearch. Two stacked bugs:
 
 1. `es_address` was `https://10.81.1.25:9200`; the server speaks **plain HTTP**
    (`curl http://` → 401 auth challenge; `curl https://` → connection failure).
-2. The password `-97z1wUJcnE_Y31SuYg-` was stale. The real value is **`changeme`**, found in
-   the ES container's `ELASTIC_PASSWORD` env on beluga1. Ironically the untouched template
-   `install_falco.yml` had `changeme` correct all along.
+2. The configured Elasticsearch password was stale. The corrected credential was read from the ES container's launch environment on beluga1.
 
 Before the fix ES had **zero indices**. After: `falcosidekick` logs
 `Elasticsearch - POST OK (201)` and the `falco` index contains a real alert
 (`Read sensitive file untrusted`, `file=/etc/shadow`, full process lineage, MITRE `T1555`).
 
-> **Security note:** `changeme` is the live password on a cluster reachable from every
-> deployed VM, hardcoded in 4 files across 2 repos. There is **no config indirection for ES
-> anywhere in MHBench** — v3's `config.yaml` has no ES section either. Worth moving into
-> `config.yaml` next to `openstack:` and rotating.
+> **Security note:** the Elasticsearch credential was live on a cluster reachable from every deployed VM, hardcoded in 4 files across 2 repos. There is **no config indirection for ES anywhere in MHBench** — v3's `config.yaml` has no ES section either. Worth moving into `config.yaml` next to `openstack:` and rotating.
 
 ---
 
@@ -262,7 +259,7 @@ already there and are **not** mine.
 4. **Decide on sysflow at all.** Falco covers the same syscall ground, works, and is
    CO-RE-clean. If you don't need sysflow's flow records, dropping it removes this entire
    class of problem.
-5. **Move ES settings into `config.yaml`** and rotate `changeme` (§3).
+5. **Move ES settings into `config.yaml`** and rotate the Elasticsearch credential (§3).
 
 ---
 

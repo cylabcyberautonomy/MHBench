@@ -77,3 +77,8 @@ fix_efi_fstab: src/playbooks/plays/fix_efi_fstab.yml
 bake_attacker_tools: src/playbooks/plays/bake_attacker_tools.yml
 start_incalmo: src/playbooks/plays/start_incalmo.yml
 install_metasploit: src/playbooks/plays/install_metasploit.yml
+install_frr: src/playbooks/plays/install_frr.yml
+configure_routing: src/playbooks/plays/configure_routing.yml
+verify_bgp: src/playbooks/plays/verify_bgp.yml
+prepare_bgp_scenario: src/playbooks/plays/prepare_bgp_scenario.yml
+install_kali_attacker: src/playbooks/plays/install_kali_attacker.yml

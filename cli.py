@@ -23,7 +23,9 @@ def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s", level=level)
 
 
-def _require_backend_config(config) -> None:
+def _require_backend_config(config, topology=None) -> None:
+    if topology is not None and topology.routing is not None and config.backend != "openstack":
+        raise click.ClickException(f"BGP routing is not supported by the {config.backend} backend; use OpenStack.")
     if config.active_backend_config() is None:
         raise click.ClickException(
             f"'{config.backend}' config block is required for this command "
@@ -162,17 +164,17 @@ def provision(ctx: click.Context, spec: Path, c2c_url: str | None, project_name:
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    errors = parser.validate(topology, offline, online)
+    if c2c_url:
+        parsed = urlparse(c2c_url)
+        config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
+
+    errors = parser.validate(topology, offline, online, config)
     if errors:
         for err in errors:
             click.echo(f"  ERROR: {err}", err=True)
         raise click.ClickException("Spec validation failed.")
 
-    _require_backend_config(config)
-
-    if c2c_url:
-        parsed = urlparse(c2c_url)
-        config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
+    _require_backend_config(config, topology)
 
     playbook_registry = PlaybookRegistryService(config)
     backend = build_backend(config, online, project_name=project_name)
@@ -213,14 +215,20 @@ def configure(ctx: click.Context, spec: Path, mgmt_ip: str | None, c2c_url: str 
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    _require_backend_config(config)
-
     if c2c_url:
         parsed = urlparse(c2c_url)
         config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
     if attacker_play:
         config.attacker_play = attacker_play
     config.attacker_only = attacker_only
+
+    _require_backend_config(config, topology)
+    if topology.routing is not None:
+        if mgmt_ip is None:
+            raise click.ClickException("BGP configuration requires --mgmt-ip.")
+        errors = parser.validate(topology, OfflineRegistryService(config), online, config)
+        if errors:
+            raise click.ClickException("; ".join(errors))
 
     playbook_registry = PlaybookRegistryService(config)
     backend = build_backend(config, online, project_name=project_name)
@@ -257,7 +265,11 @@ def deploy(ctx: click.Context, spec: Path, validate_only: bool, c2c_url: str | N
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    errors = parser.validate(topology, offline, online)
+    if c2c_url:
+        parsed = urlparse(c2c_url)
+        config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
+
+    errors = parser.validate(topology, offline, online, config)
     if errors:
         for err in errors:
             click.echo(f"  ERROR: {err}", err=True)
@@ -267,11 +279,7 @@ def deploy(ctx: click.Context, spec: Path, validate_only: bool, c2c_url: str | N
         click.echo("Validation passed.")
         return
 
-    _require_backend_config(config)
-
-    if c2c_url:
-        parsed = urlparse(c2c_url)
-        config.c2c = C2CConfig(ip=parsed.hostname, port=parsed.port or 8888)
+    _require_backend_config(config, topology)
 
     playbook_registry = PlaybookRegistryService(config)
     backend = build_backend(config, online, project_name=project_name)
@@ -308,7 +316,7 @@ def teardown(ctx: click.Context, spec: Path, yes: bool, project_name: str | None
             abort=True,
         )
 
-    _require_backend_config(config)
+    _require_backend_config(config, topology)
 
     online = OnlineRegistryService(config)
     playbook_registry = PlaybookRegistryService(config)
@@ -371,8 +379,8 @@ def request_ingress(ctx: click.Context, spec: Path, project_name: str | None, mg
     A no-defender run never calls this, so the box stays fully isolated (zero open ports).
     """
     config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
-    _require_backend_config(config)
     topology = JsonSpecParser().parse(spec)
+    _require_backend_config(config, topology)
     box_ip = _defender_box_ip(topology)
     if not box_ip:
         raise click.ClickException("Topology has no defender_subnet/box; nothing to route ingress to.")
@@ -430,7 +438,7 @@ def collect(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str | No
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    _require_backend_config(config)
+    _require_backend_config(config, topology)
 
     playbook_registry = PlaybookRegistryService(config)
     backend = build_backend(config, online, project_name=project_name)
@@ -464,7 +472,7 @@ def rotate_logs(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str 
     click.echo(f"Parsing spec: {spec}")
     topology = parser.parse(spec)
 
-    _require_backend_config(config)
+    _require_backend_config(config, topology)
 
     playbook_registry = PlaybookRegistryService(config)
     backend = build_backend(config, online, project_name=project_name)
@@ -483,9 +491,11 @@ def rotate_logs(ctx: click.Context, spec: Path, mgmt_ip: str, project_name: str 
 def _dynamic_orchestrator(ctx: click.Context, spec: Path, project_name: str | None):
     """Shared setup for the per-host subcommands: parse the spec + build the orchestrator."""
     config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
-    _require_backend_config(config)
     online = OnlineRegistryService(config)
     topology = JsonSpecParser().parse(spec)
+    _require_backend_config(config, topology)
+    if topology.routing is not None:
+        raise click.ClickException("Dynamic host operations are not supported for BGP environments.")
     backend = build_backend(config, online, project_name=project_name)
     orch = DeploymentOrchestrator(backend, config, online, PlaybookRegistryService(config), project_name=project_name)
     return topology, orch

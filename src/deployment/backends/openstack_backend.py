@@ -38,22 +38,26 @@ class OpenStackBackend(CloudBackend):
         sg_name = f"{self._project_name}-management_sg" if self._project_name else "management_sg"
         sg = self._conn.network.find_security_group(sg_name, project_id=self._conn.current_project_id)
         if not sg:
-            logger.warning("management_sg %r not found; cannot open tcp/%d", sg_name, port)
-            return
+            raise RuntimeError(f"Management security group {sg_name!r} not found; cannot open tcp/{port}")
         for src in sources:
             try:
                 self._conn.network.create_security_group_rule(
                     security_group_id=sg.id, direction="ingress", protocol="tcp",
                     port_range_min=port, port_range_max=port, remote_ip_prefix=src)
                 logger.info("management_sg: opened tcp/%d from %s", port, src)
-            except ConflictException:
-                pass
+            except ConflictException as exc:
+                if (exc.response is None or
+                        exc.response.json().get("NeutronError", {}).get("type") != "SecurityGroupRuleExists"):
+                    raise
 
     def provision_network(self, topology: NetworkTopology) -> None:
         NetworkDeployer(self._conn, self._config, self._project_name).deploy(topology)
 
     def provision_hosts(self, topology: NetworkTopology) -> str | None:
         return HostDeployer(self._conn, self._config, self._online, self._project_name).deploy(topology)
+
+    def routing_interfaces(self, topology: NetworkTopology) -> dict[str, dict]:
+        return self._host_deployer().routing_interfaces(topology)
 
     def _host_deployer(self) -> HostDeployer:
         return HostDeployer(self._conn, self._config, self._online, self._project_name)

@@ -1,0 +1,53 @@
+---
+- name: Install FRR router software
+  hosts: "{{ host }}"
+  remote_user: root
+  become: yes
+
+  tasks:
+    - name: Install FRR and networking tools without starting services
+      ansible.builtin.apt:
+        name:
+          - frr
+          - iproute2
+          - iptables
+          - tcpdump
+        state: present
+        update_cache: yes
+        policy_rc_d: 101
+
+    - name: Leave FRR stopped until deployment configuration is applied
+      ansible.builtin.systemd:
+        name: frr
+        state: stopped
+        enabled: no
+
+    - name: Prepare zebra and BGP daemon settings
+      ansible.builtin.lineinfile:
+        path: /etc/frr/daemons
+        regexp: "^{{ item.name }}="
+        line: "{{ item.name }}={{ item.value }}"
+      loop:
+        - {name: zebra, value: "yes"}
+        - {name: bgpd, value: "yes"}
+        - {name: vtysh_enable, value: "yes"}
+        - {name: zebra_options, value: '" -d -A 127.0.0.1 -s 90000000"'}
+        - {name: bgpd_options, value: '" -d -A 127.0.0.1"'}
+
+    - name: Prepare integrated configuration saving
+      ansible.builtin.copy:
+        dest: /etc/frr/vtysh.conf
+        owner: frr
+        group: frrvty
+        mode: '0640'
+        content: |
+          service integrated-vtysh-config
+
+    - name: Leave an empty topology configuration
+      ansible.builtin.copy:
+        dest: /etc/frr/frr.conf
+        owner: frr
+        group: frr
+        mode: '0640'
+        content: |
+          !

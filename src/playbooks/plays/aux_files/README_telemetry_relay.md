@@ -1,11 +1,14 @@
-# telemetry_relay.py — the fixed telemetry bake target (management host)
+# Telemetry relay on the management host
 
-Transparent HTTP fan-out relay. Sensors ship to ONE constant address on the
-management host (`<mgmt.host_ip>:9200`, e.g. `10.0.1.10:9200`); the relay
-forwards each request **byte-for-byte** (method + path + raw body) to every
-downstream listed in `/etc/telemetry_relay/dests.json`. Redirection and
-fan-out live here, not on the victims — rewrite the dests file and the stream
-re-routes with no victim-side change.
+Sensors send telemetry to `management.host_ip:9200`. The relay reads `/etc/telemetry_relay/dests.json` for each request and forwards to its `dests` list. A destination ending in `/` preserves the incoming request path; otherwise the destination URL is used as written. POST/PUT bodies are forwarded without parsing.
+
+The client receives the first destination's HTTP status, response headers, and body, or HTTP 502 if that destination is unreachable. Additional destinations are attempted sequentially with a 15-second timeout each; they can delay the response.
+
+## Configuration
+
+`AnsibleRunner` installs and starts the relay through `setup_telemetry_relay.yml` during configuration when a management host is present. Relay setup failures are logged without failing the whole deployment. The playbook preserves an existing destinations file. `MHBENCH_RELAY_ES_ADDRESS` supplies the initial downstream when that file is first created.
+
+Management security-group rules permit victim telemetry on TCP/9200. Arena's `program_ingress()` uses MHBench's `request-ingress --telemetry PORT` to direct the relay to the defender's Elasticsearch. Changing the destinations file redirects subsequent requests without restarting the relay or reconfiguring sensors.
 
 ## Live-validated (2026-09-29)
 Deployed `chain_2hosts_instrumented` (project `relaylive1`), ran the relay on
@@ -15,14 +18,3 @@ triggered a falco `/etc/shadow` alert, and confirmed 3 docs arrived at the
 harness ES via the relay — the `Sensitive file opened for reading` events,
 intact. Proves: constant bake target, raw ES-bulk forwarding with the index
 path preserved, redirection owned by the relay.
-
-## Provisioning wiring (still to bake — see ARENA_PLUGIN_REQUIREMENTS.md item 3)
-1. Ship this script to the mgmt host + a `telemetry_relay.service` systemd unit
-   (`ExecStart=/usr/bin/python3 telemetry_relay.py --port 9200`), started at
-   configure time with a per-deploy `dests.json`.
-2. Open `management_sg` ingress tcp/9200 from every victim subnet.
-3. Bake sensors (`install_falco_nostart` / `install_filebeat_nostart`
-   `es_address`) to the relay `http://<mgmt.host_ip>:9200` instead of a
-   hardcoded ES — this is the `telemetry_ingest()` constant in the harness.
-
-Validated by hand in this pass; the automatic wiring is the remaining code.

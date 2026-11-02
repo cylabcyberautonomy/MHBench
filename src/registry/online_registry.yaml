@@ -211,3 +211,8 @@
   parent: kali_base
   playbooks:
   location: null
+
+- name: kali_attacker_running
+  parent: kali_docker
+  playbooks:
+  location: null

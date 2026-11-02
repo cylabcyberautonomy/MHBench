@@ -1,0 +1,59 @@
+#!/bin/sh
+set -eu
+
+interface_for_mac() {
+    for path in /sys/class/net/*; do
+        read -r mac < "$path/address"
+        if [ "$mac" = "$1" ]; then
+            basename "$path"
+            return
+        fi
+    done
+    echo "Interface MAC not found: $1" >&2
+    return 1
+}
+control_if=$(interface_for_mac "{{ routing_control_mac }}")
+
+# Keep transit disabled until the persistent control/data guard is installed.
+sysctl -w net.ipv4.ip_forward=0
+if iptables -w 5 -nL MHBENCH_FORWARD >/dev/null 2>&1; then
+    iptables -w 5 -F MHBENCH_FORWARD
+else
+    iptables -w 5 -N MHBENCH_FORWARD
+fi
+iptables -w 5 -A MHBENCH_FORWARD -i "$control_if" -j DROP
+iptables -w 5 -A MHBENCH_FORWARD -o "$control_if" -j DROP
+{% for source in routing_response_sources %}
+response_if=$(interface_for_mac "{{ source.mac }}")
+iptables -w 5 -A MHBENCH_FORWARD -s {{ source.prefix }} -i "$response_if" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -w 5 -A MHBENCH_FORWARD -s {{ source.prefix }} -i "$response_if" -j DROP
+{% endfor %}
+iptables -w 5 -A MHBENCH_FORWARD -j RETURN
+if ! iptables -w 5 -C FORWARD -j MHBENCH_FORWARD >/dev/null 2>&1; then
+    iptables -w 5 -I FORWARD 1 -j MHBENCH_FORWARD
+fi
+
+for path in /proc/sys/net/ipv4/conf/*; do
+    printf '0\n' > "$path/accept_redirects"
+    printf '0\n' > "$path/send_redirects"
+    printf '0\n' > "$path/rp_filter"
+done
+{% if routing_router %}
+if iptables -w 5 -nL MHBENCH_INPUT >/dev/null 2>&1; then
+    iptables -w 5 -F MHBENCH_INPUT
+else
+    iptables -w 5 -N MHBENCH_INPUT
+fi
+iptables -w 5 -A MHBENCH_INPUT -i "$control_if" -j RETURN
+iptables -w 5 -A MHBENCH_INPUT -i lo -j RETURN
+iptables -w 5 -A MHBENCH_INPUT -p tcp --dport 22 -j DROP
+{% for peer in routing_peers %}
+iptables -w 5 -A MHBENCH_INPUT -p tcp --dport 179 -s {{ peer }} -j RETURN
+{% endfor %}
+iptables -w 5 -A MHBENCH_INPUT -p tcp --dport 179 -j DROP
+iptables -w 5 -A MHBENCH_INPUT -j RETURN
+if ! iptables -w 5 -C INPUT -j MHBENCH_INPUT >/dev/null 2>&1; then
+    iptables -w 5 -I INPUT 1 -j MHBENCH_INPUT
+fi
+sysctl -w net.ipv4.ip_forward=1
+{% endif %}

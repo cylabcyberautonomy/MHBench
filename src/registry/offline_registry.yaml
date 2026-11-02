@@ -22,6 +22,12 @@
   - kali_packages
   disk_size_gb: null
   location: src/compilation/images/kali_base.qcow2
+- name: kali_docker
+  parent: kali_base
+  playbooks:
+  - install_kali_attacker
+  disk_size_gb: null
+  location: src/compilation/images/kali_docker.qcow2
 - name: ubuntu_root_ssh
   parent: ubuntu20
   playbooks:
@@ -35,6 +41,12 @@
   - enable_host_logging
   disk_size_gb: 12
   location: src/compilation/images/ubuntu_base.qcow2
+- name: frr_router
+  parent: ubuntu_base
+  playbooks:
+  - install_frr
+  disk_size_gb: null
+  location: src/compilation/images/frr_router.qcow2
 - name: webserver
   parent: ubuntu_base
   playbooks:

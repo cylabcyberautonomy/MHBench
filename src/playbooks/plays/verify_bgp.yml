@@ -1,0 +1,38 @@
+---
+- name: Verify declared BGP sessions and initial origins
+  hosts: "{{ host }}"
+  remote_user: root
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Wait for every declared IPv4 session
+      ansible.builtin.command:
+        argv: [vtysh, -c, "show bgp ipv4 unicast summary json"]
+      register: routing_summary
+      changed_when: false
+      until: >-
+        ((routing_summary.stdout | from_json).get('peers', {})
+        | dict2items | selectattr('key', 'in', routing_peers)
+        | selectattr('value.state', 'equalto', 'Established') | list | length) == (routing_peers | length)
+      retries: 30
+      delay: 4
+      when: routing_peers | length > 0
+
+    - name: Require each declared initial prefix in BGP
+      ansible.builtin.command:
+        argv: [vtysh, -c, "show bgp ipv4 unicast {{ item }} json"]
+      register: routing_origin
+      changed_when: false
+      until: (routing_origin.stdout | from_json).get('paths', []) | length > 0
+      retries: 10
+      delay: 2
+      loop: "{{ routing_origins }}"
+
+    - name: Require a real kernel route for each initial origin
+      ansible.builtin.command:
+        argv: [ip, -j, -4, route, show, exact, "{{ item }}"]
+      register: routing_kernel
+      changed_when: false
+      failed_when: (routing_kernel.stdout | from_json) | length == 0
+      loop: "{{ routing_origins }}"

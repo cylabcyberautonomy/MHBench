@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,7 @@ from config.config import Config
 from src.abstractions.network import NetworkTopology
 from src.deployment.backends.base import CloudBackend
 from src.deployment.online_registry_service import OnlineRegistryService
+from src.deployment.routing import guest_configurations
 from src.playbooks.playbook_registry_service import PlaybookRegistryService
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ class AnsibleRunner:
         backend: CloudBackend | None = None,
         project_name: str | None = None,
     ) -> None:
+        self._config = config
         self._ssh_key_path = config.ssh_key_path
         self._online = online_registry
         self._playbook_registry = playbook_registry
@@ -115,32 +118,41 @@ class AnsibleRunner:
 
         try:
             for attempt in range(1, _PLAYBOOK_RETRIES + 1):
-                result = ansible_runner.run(
-                    private_data_dir=tmp,
-                    project_dir=project_dir,
-                    playbook=pb_path.name,
-                    inventory=inventory,
-                    extravars=extravars,
-                    event_handler=_stream,
-                    quiet=True,
-                    verbosity=self._verbosity,
-                    envvars={
-                        # One reused SSH connection per host across all tasks (ControlPersist) instead of a fresh
-                        # handshake per task — a 26-host configure otherwise opens thousands of connections through
-                        # the single bastion and overwhelms its sshd (the kex/timeout/connection-closed storms).
-                        "ANSIBLE_SSH_ARGS": (
-                            "-o ControlMaster=auto "
-                            f"-o ControlPath={ssh_ctl_dir}/%C "
-                            "-o ControlPersist=60s "
-                            "-o StrictHostKeyChecking=no "
-                            "-o UserKnownHostsFile=/dev/null "
-                            "-o ServerAliveInterval=30 "
-                            "-o ServerAliveCountMax=10"
-                        ),
-                        "ANSIBLE_PIPELINING": "True",
-                        "ANSIBLE_SSH_RETRIES": "3",
-                    }
-                )
+                # Ansible Runner installs process handlers on the main thread; do not leak them.
+                handlers = ({s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
+                            if threading.current_thread() is threading.main_thread() else {})
+                try:
+                    result = ansible_runner.run(
+                        private_data_dir=tmp,
+                        project_dir=project_dir,
+                        playbook=pb_path.name,
+                        inventory=inventory,
+                        extravars=extravars,
+                        event_handler=_stream,
+                        quiet=True,
+                        verbosity=self._verbosity,
+                        envvars={
+                            # One reused SSH connection per host across all tasks (ControlPersist) instead of a fresh
+                            # handshake per task — a 26-host configure otherwise opens thousands of connections through
+                            # the single bastion and overwhelms its sshd (the kex/timeout/connection-closed storms).
+                            "ANSIBLE_SSH_ARGS": (
+                                "-o ControlMaster=auto "
+                                f"-o ControlPath={ssh_ctl_dir}/%C "
+                                "-o ControlPersist=60s "
+                                "-o StrictHostKeyChecking=no "
+                                "-o UserKnownHostsFile=/dev/null "
+                                "-o ServerAliveInterval=30 "
+                                "-o ServerAliveCountMax=10"
+                            ),
+                            "ANSIBLE_PIPELINING": "True",
+                            "ANSIBLE_SSH_RETRIES": "3",
+                        }
+                    )
+                finally:
+                    for signum, handler in handlers.items():
+                        signal.signal(signum, handler)
+                if result.status == "canceled":
+                    raise KeyboardInterrupt(f"Playbook '{pb_name}' canceled")
                 if result.status == "successful":
                     return
                 stderr = result.stderr.read() if result.stderr else ""
@@ -162,6 +174,22 @@ class AnsibleRunner:
         finally:
             if logf:
                 logf.close()
+
+    def _configure_routing(self, topology: NetworkTopology, inventory_hosts: dict) -> None:
+        if topology.routing is None or self._attacker_only:
+            return
+        if self._backend is None or self._backend.name != "openstack":
+            raise NotImplementedError("BGP routing configuration requires the OpenStack backend.")
+        actual = self._backend.routing_interfaces(topology)
+        guests = guest_configurations(topology, self._config, actual)
+        project_dir = str((_MHBENCH_DIR / self._playbook_registry.get_path("configure_routing")).resolve().parent)
+        inventory = {"all": {"hosts": inventory_hosts}}
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, args in guests.items():
+                self._run_playbook("configure_routing", inventory, {"host": name, **args}, tmp, project_dir)
+            for router in topology.routing.routers:
+                self._run_playbook("verify_bgp", inventory, {"host": router.host, **guests[router.host]},
+                                   tmp, project_dir)
 
     def run(self, topology: NetworkTopology, mgmt_floating_ip: str) -> None:
         hosts = topology.get_all_hosts()
@@ -198,12 +226,14 @@ class AnsibleRunner:
             for host in hosts
         }
 
+        self._configure_routing(topology, inventory_hosts)
+
         queue: list[tuple[str | None, str, dict]] = []
         for host in hosts:
-            if self._attacker_only and host.vm_type != "kali_running":
+            if self._attacker_only and not self._is_kali(host.vm_type):
                 continue
             runtime_pbs = self._online.get_runtime_playbooks(host.vm_type)
-            if self._attacker_play and host.vm_type == "kali_running":
+            if self._attacker_play and self._is_kali(host.vm_type):
                 runtime_pbs = [self._attacker_play]
             if runtime_pbs:
                 queue.append((host.name, "check_if_host_up", {
@@ -291,9 +321,15 @@ class AnsibleRunner:
     # The environment ISSUES two scoped keys on top of the broad management key (which stays for
     # provisioning and never enters a spec): attacker_key opens the foothold only, defender_key opens the
     # defender box + victims. Injected here at configure so every deploy path gets them. Classified by
-    # subnet: attacker_subnet -> foothold, defender_subnet -> box, everything else internal -> victim.
+    # subnet: attacker_subnet -> foothold (prefer a Kali host over a router in the same subnet),
+    # defender_subnet -> box, everything else internal -> victim.
     _ATTACKER_SUBNET = "attacker_subnet"
     _DEFENDER_SUBNET = "defender_subnet"
+
+    @staticmethod
+    def _is_kali(vm_type: str) -> bool:
+        """True for any Kali attacker image profile (the shared one or a dedicated one)."""
+        return vm_type.startswith("kali")
 
     def _issue_scoped_keys(self):
         keydir = _MHBENCH_DIR / "keys"
@@ -345,7 +381,7 @@ class AnsibleRunner:
         except Exception as e:  # noqa: BLE001 — best-effort; never fail configure
             logger.warning("Scoped-key generation failed (%s); skipping injection.", e)
             return
-        foothold_ip = None
+        attacker_hosts: list[tuple[bool, str]] = []
         box_ip = None
         victim_ips: list[str] = []
         for sub in topology.get_all_subnets():
@@ -353,12 +389,15 @@ class AnsibleRunner:
                 if not h.ip_address:
                     continue
                 ip = str(h.ip_address)
-                if sub.name == self._ATTACKER_SUBNET or h.vm_type == "kali_running":
-                    foothold_ip = ip
+                if sub.name == self._ATTACKER_SUBNET or self._is_kali(h.vm_type):
+                    attacker_hosts.append((self._is_kali(h.vm_type), ip))
                 elif sub.name == self._DEFENDER_SUBNET:
                     box_ip = ip
                 else:
                     victim_ips.append(ip)
+        foothold_ip = next((ip for is_kali, ip in attacker_hosts if is_kali), None)
+        if foothold_ip is None and attacker_hosts:
+            foothold_ip = attacker_hosts[0][1]
         try:
             if foothold_ip:
                 ok = self._inject_pubkey(ak_pub, foothold_ip, mgmt_floating_ip)
@@ -412,14 +451,16 @@ class AnsibleRunner:
             for host in hosts
         }
 
+        self._configure_routing(topology, inventory_hosts)
+
         # Per-host chain = check_if_host_up then that host's online plays, ordered (a host's own plays are
         # sequential; only across hosts is it parallel). Topology plays are cross-host and run after, serially.
         per_host: dict[str, list[tuple[str, dict]]] = {}
         for host in hosts:
-            if self._attacker_only and host.vm_type != "kali_running":
+            if self._attacker_only and not self._is_kali(host.vm_type):
                 continue
             runtime_pbs = self._online.get_runtime_playbooks(host.vm_type)
-            if self._attacker_play and host.vm_type == "kali_running":
+            if self._attacker_play and self._is_kali(host.vm_type):
                 runtime_pbs = [self._attacker_play]
             if runtime_pbs:
                 per_host[host.name] = (

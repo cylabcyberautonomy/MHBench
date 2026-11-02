@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import time
@@ -125,6 +126,14 @@ class GCPBackend(CloudBackend):
     def _tag(name: str) -> str:
         return _gcp_name(name)
 
+    def _policy_firewall_name(self, rule_name: str) -> str:
+        name = self._n(rule_name)
+        if len(name) == 63:
+            # Keep distinct connection/management permissions distinct after truncation.
+            identity = f"{self._project_name}:{rule_name}"
+            name = name[:54] + "-" + hashlib.sha256(identity.encode()).hexdigest()[:8]
+        return name
+
     # -- resolution helpers -------------------------------------------------
 
     def _machine_type_url(self, flavor: str) -> str:
@@ -154,6 +163,8 @@ class GCPBackend(CloudBackend):
     # -- networking ---------------------------------------------------------
 
     def provision_network(self, topology: NetworkTopology) -> None:
+        if topology.routing is not None:
+            raise NotImplementedError("BGP routing is not supported by the GCP backend.")
         c = self._compute
         logger.info("Creating VPC network '%s'...", self._net_name())
         self._wait(self._networks.insert(project=self._project, network_resource=c.Network(
@@ -195,74 +206,83 @@ class GCPBackend(CloudBackend):
         c = self._compute
         net = self._net_url()
 
-        # Management: allow everything in (it holds the external IP / bastion) — matches OpenStack management_sg.
+        management_source = f"{self._management.host_ip}/32" if self._management else None
         if self._management:
+            tag = self._tag(self._n("management"))
             self._insert_firewall(c.Firewall(
-                name=self._n("management-ingress"), network=net, direction="INGRESS", priority=1000,
-                source_ranges=["0.0.0.0/0"], target_tags=[self._tag(self._n("management"))],
-                allowed=[c.Allowed(I_p_protocol="all")],
+                name=self._policy_firewall_name("management-ssh"), network=net, direction="INGRESS", priority=1000,
+                source_ranges=["0.0.0.0/0"], target_tags=[tag],
+                allowed=[c.Allowed(I_p_protocol="tcp", ports=["22"])],
+            ))
+            relay_sources = {management_source} | {
+                str(s.cidr) for s in topology.get_all_subnets()
+                if not s.external and s.name not in {"attacker_subnet", "defender_subnet"}
+            }
+            self._insert_firewall(c.Firewall(
+                name=self._policy_firewall_name("management-telemetry"), network=net, direction="INGRESS", priority=1000,
+                source_ranges=sorted(relay_sources), target_tags=[tag],
+                allowed=[c.Allowed(I_p_protocol="tcp", ports=["9200"])],
             ))
 
         for subnet in topology.get_all_subnets():
             tag = self._tag(self._n(subnet.name))
-            if subnet.external:
-                # External subnet: reachable from anywhere.
+            sources = ["0.0.0.0/0"] if subnet.external else [str(subnet.cidr)]
+            if not subnet.external and management_source:
+                sources.append(management_source)
+            self._insert_firewall(c.Firewall(
+                name=self._n(f"{subnet.name}-ingress"), network=net, direction="INGRESS", priority=1000,
+                source_ranges=sources, target_tags=[tag],
+                allowed=[c.Allowed(I_p_protocol="all")],
+            ))
+            if not subnet.external:
+                for i, connection in enumerate(topology.get_ingress_connections(subnet.name)):
+                    source = topology.get_subnet_by_name(connection.from_subnet)
+                    self._insert_firewall(c.Firewall(
+                        name=self._policy_firewall_name(f"{subnet.name}-connection-{i}"), network=net,
+                        direction="INGRESS", priority=1000,
+                        source_ranges=[str(source.cidr)], target_tags=[tag],
+                        allowed=[c.Allowed(I_p_protocol=connection.protocol or "all",
+                                           ports=[str(p) for p in connection.ports or []])],
+                    ))
+            # Egress is independent of public ingress. Destination ingress still governs
+            # internal connections; stateful replies need no reverse initiation grant.
+            if not subnet.internet_egress:
+                internal = {str(s.cidr) for s in topology.get_all_subnets()}
+                if management_source:
+                    internal.add(management_source)
                 self._insert_firewall(c.Firewall(
-                    name=self._n(f"{subnet.name}-ingress"), network=net, direction="INGRESS", priority=1000,
-                    source_ranges=["0.0.0.0/0"], target_tags=[tag],
+                    name=self._n(f"{subnet.name}-egress-internal"), network=net, direction="EGRESS", priority=1000,
+                    destination_ranges=sorted(internal), target_tags=[tag],
                     allowed=[c.Allowed(I_p_protocol="all")],
                 ))
-            else:
-                # Internal subnet: own CIDR + peer CIDRs + management CIDR.
-                sources = [str(subnet.cidr)]
-                peers: set[str] = set()
-                for conn in topology.subnet_connections:
-                    if conn.from_subnet == subnet.name:
-                        peers.add(conn.to_subnet)
-                    elif conn.bidirectional and conn.to_subnet == subnet.name:
-                        peers.add(conn.from_subnet)
-                for peer_name in peers:
-                    peer = topology.get_subnet_by_name(peer_name)
-                    if peer:
-                        sources.append(str(peer.cidr))
-                if self._management:
-                    sources.append(self._management.cidr)
-                # Defender parity with the OpenStack network_deployer: every VICTIM subnet also accepts
-                # ingress from the defender box, so the defender can reach all tiers for detection/active-
-                # response without per-topology authoring. Excluded: the attacker subnet (defender<->attacker
-                # stays severed) and the defender's own subnet — so the box itself keeps accepting only
-                # mgmt + its own subnet here (attacker/victims can't initiate to it: isolated).
-                dsub = topology.get_subnet_by_name("defender_subnet")
-                if dsub and subnet.name not in ("attacker_subnet", "defender_subnet"):
-                    sources.append(str(dsub.cidr))
-                # Attacker-C2 parity with the OpenStack network_deployer: the C2 runs on the Kali
-                # foothold in the attacker subnet, so victims must be able to beacon to it. Open the
-                # attacker subnet's ingress from every OTHER subnet — but not the defender subnet
-                # (attacker<->defender stays severed). Without this, victim implants never reach the C2.
-                if subnet.name == "attacker_subnet":
-                    for other in topology.get_all_subnets():
-                        if other.name not in ("attacker_subnet", "defender_subnet"):
-                            sources.append(str(other.cidr))
                 self._insert_firewall(c.Firewall(
-                    name=self._n(f"{subnet.name}-ingress"), network=net, direction="INGRESS", priority=1000,
-                    source_ranges=sorted(set(sources)), target_tags=[tag],
-                    allowed=[c.Allowed(I_p_protocol="all")],
+                    name=self._n(f"{subnet.name}-egress-deny"), network=net, direction="EGRESS", priority=65534,
+                    destination_ranges=["0.0.0.0/0"], target_tags=[tag],
+                    denied=[c.Denied(I_p_protocol="all")],
                 ))
-                # Egress: GCP defaults to allow-all egress. Only restrict when the
-                # subnet forbids internet egress: allow internal, then deny the rest.
-                if not subnet.internet_egress:
-                    internal = sorted({str(s.cidr) for s in topology.get_all_subnets()}
-                                      | ({self._management.cidr} if self._management else set()))
-                    self._insert_firewall(c.Firewall(
-                        name=self._n(f"{subnet.name}-egress-internal"), network=net, direction="EGRESS", priority=1000,
-                        destination_ranges=internal, target_tags=[tag],
-                        allowed=[c.Allowed(I_p_protocol="all")],
-                    ))
-                    self._insert_firewall(c.Firewall(
-                        name=self._n(f"{subnet.name}-egress-deny"), network=net, direction="EGRESS", priority=65534,
-                        destination_ranges=["0.0.0.0/0"], target_tags=[tag],
-                        denied=[c.Denied(I_p_protocol="all")],
-                    ))
+
+    def add_management_ingress(self, port: int, sources: list[str]) -> None:
+        from google.api_core.exceptions import NotFound
+
+        if not sources:
+            return  # An omitted source range would allow every source on GCP.
+        c = self._compute
+        firewall = c.Firewall(
+            name=self._policy_firewall_name(f"management-forward-{port}"), network=self._net_url(),
+            direction="INGRESS", priority=1000,
+            source_ranges=sorted(set(sources)), target_tags=[self._tag(self._n("management"))],
+            allowed=[c.Allowed(I_p_protocol="tcp", ports=[str(port)])],
+        )
+        try:
+            existing = self._firewalls.get(project=self._project, firewall=firewall.name)
+        except NotFound:
+            self._insert_firewall(firewall)
+        else:
+            # Match OpenStack: repeated requests add sources to this port.
+            firewall.source_ranges = sorted(set(existing.source_ranges) | set(sources))
+            self._wait(self._firewalls.update(
+                project=self._project, firewall=firewall.name, firewall_resource=firewall,
+            ))
 
     def _insert_firewall(self, firewall) -> None:
         logger.info("Creating firewall rule '%s'...", firewall.name)
@@ -298,13 +318,18 @@ class GCPBackend(CloudBackend):
 
     def teardown_network(self, topology: NetworkTopology) -> None:
         # Reverse order: router, firewalls, subnetworks, network. Missing == fine.
+        if topology.routing is not None:
+            raise NotImplementedError("BGP routing is not supported by the GCP backend.")
         self._delete(lambda: self._routers.delete(project=self._project, region=self._region, router=self._n("router")),
                      f"router {self._n('router')}")
         fw_names = []
         if self._management:
-            fw_names.append(self._n("management-ingress"))
+            fw_names += [self._policy_firewall_name("management-ssh"), self._policy_firewall_name("management-telemetry")]
         for subnet in topology.get_all_subnets():
             fw_names.append(self._n(f"{subnet.name}-ingress"))
+            if not subnet.external:
+                fw_names += [self._policy_firewall_name(f"{subnet.name}-connection-{i}")
+                             for i, _ in enumerate(topology.get_ingress_connections(subnet.name))]
             if not subnet.internet_egress:  # only these were created (see _create_firewall_rules)
                 fw_names += [self._n(f"{subnet.name}-egress-internal"),
                              self._n(f"{subnet.name}-egress-deny")]
@@ -431,6 +456,8 @@ class GCPBackend(CloudBackend):
 
     def provision_hosts(self, topology: NetworkTopology) -> str | None:
         # Build every instance spec up front (management first so we can return its external IP).
+        if topology.routing is not None:
+            raise NotImplementedError("BGP routing is not supported by the GCP backend.")
         specs: list[tuple[str, object]] = []
         if self._management:
             mgmt = self._management
@@ -486,6 +513,8 @@ class GCPBackend(CloudBackend):
         return None
 
     def teardown_hosts(self, topology: NetworkTopology) -> None:
+        if topology.routing is not None:
+            raise NotImplementedError("BGP routing is not supported by the GCP backend.")
         names = [self._inst(h.name) for h in topology.get_all_hosts()]
         if self._management:
             names.append(self._inst("management-host"))

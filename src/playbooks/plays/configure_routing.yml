@@ -1,0 +1,135 @@
+---
+- name: Configure routed guest networking
+  hosts: "{{ host }}"
+  remote_user: root
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Wait for the bootstrap control connection
+      ansible.builtin.wait_for_connection:
+        sleep: 2
+        timeout: 120
+
+    - name: Install the guest network validation helper
+      ansible.builtin.copy:
+        src: aux_files/routing_guest.py
+        dest: /usr/local/sbin/mhbench-routing-guest
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Validate NICs and preserve provider control routes before cutover
+      ansible.builtin.command:
+        argv: [python3, /usr/local/sbin/mhbench-routing-guest, prepare]
+        stdin: "{{ {'network': routing_netplan | from_yaml, 'control_prefixes': routing_control_prefixes, 'c2_hostname': routing_c2_hostname} | to_json }}"
+      register: routing_prepared
+      changed_when: false
+
+    - name: Identify the guest network backend
+      ansible.builtin.set_fact:
+        routing_renderer: "{{ (routing_prepared.stdout | from_json)['network'].get('renderer', 'netplan') }}"
+
+    - name: Keep cloud-init from replacing the declared guest network
+      ansible.builtin.copy:
+        dest: /etc/cloud/cloud.cfg.d/99-mhbench-network.cfg
+        content: "network: {config: disabled}\n"
+        mode: '0644'
+
+    - name: Write the complete MAC-matched network configuration
+      when: routing_renderer != 'ifupdown'
+      ansible.builtin.copy:
+        dest: /etc/netplan/50-cloud-init.yaml
+        content: "{{ routing_prepared.stdout | from_json | to_nice_yaml }}"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Install the control/data forwarding guard
+      ansible.builtin.template:
+        src: aux_files/routing_guard.sh.j2
+        dest: /usr/local/sbin/mhbench-routing-guard
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Persist the guard before networking and FRR
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/mhbench-routing-guard.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=MHBench control and data forwarding guard
+          DefaultDependencies=no
+          Wants=network-pre.target systemd-udev-settle.service
+          After=local-fs.target systemd-udev-settle.service
+          Before=network-pre.target frr.service
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/mhbench-routing-guard
+          RemainAfterExit=yes
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Apply the guard before enabling routed traffic
+      ansible.builtin.systemd:
+        name: mhbench-routing-guard
+        daemon_reload: yes
+        enabled: yes
+        state: restarted
+
+    - name: Check Netplan syntax
+      when: routing_renderer != 'ifupdown'
+      ansible.builtin.command: netplan generate
+      changed_when: false
+
+    - name: Apply the network without depending on the current SSH channel
+      when: routing_renderer != 'ifupdown'
+      ansible.builtin.command: netplan apply
+      async: 60
+      poll: 0
+      register: routing_apply
+
+    - name: Configure the Kali guest network
+      ansible.builtin.command:
+        argv: [python3, /usr/local/sbin/mhbench-routing-guest, apply-ifupdown]
+        stdin: "{{ routing_prepared.stdout | from_json | to_json }}"
+      changed_when: true
+      when: routing_renderer == 'ifupdown'
+
+    - name: Reconnect through the unchanged primary control address
+      ansible.builtin.wait_for_connection:
+        delay: 2
+        sleep: 2
+        timeout: 120
+
+    - name: Require successful completion of Netplan
+      when: routing_renderer != 'ifupdown'
+      ansible.builtin.async_status:
+        jid: "{{ routing_apply.ansible_job_id }}"
+      register: routing_apply_result
+      until: routing_apply_result.finished
+      retries: 30
+      delay: 2
+
+    - name: Verify guest addresses, explicit routes, and the sole default gateway
+      ansible.builtin.command:
+        argv: [python3, /usr/local/sbin/mhbench-routing-guest, verify]
+        stdin: "{{ routing_prepared.stdout | from_json | to_json }}"
+      changed_when: false
+
+    - name: Write the declared integrated FRR configuration
+      ansible.builtin.copy:
+        dest: /etc/frr/frr.conf
+        content: "{{ routing_frr }}"
+        owner: frr
+        group: frr
+        mode: '0640'
+      when: routing_router
+
+    - name: Start FRR only after the data plane is configured
+      ansible.builtin.systemd:
+        name: frr
+        enabled: yes
+        state: restarted
+      when: routing_router
