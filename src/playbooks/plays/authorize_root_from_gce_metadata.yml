@@ -1,0 +1,79 @@
+---
+# Bake-time play (added to kali_base): make root SSH work on Google Compute Engine.
+#
+# On GCE, MHBench's backend publishes the range SSH key under the `root:` entry of the
+# instance's `ssh-keys` metadata. Cloud images honour that entry through their GCE cloud-init
+# datasource. Kali ignores that datasource (same reason enable_host_logging can't be baked for
+# Kali), so the published root key never reaches /root/.ssh/authorized_keys and sshd closes the
+# root session even though PermitRootLogin is already baked on by enable_root_ssh.
+#
+# This bakes a tiny oneshot that, at each boot, reads the `root:` key straight from the GCE
+# metadata server and appends it to root's authorized_keys, before sshd starts. It depends on
+# nothing but the network, so it works on images whose cloud-init path is absent or ignored.
+#
+# It is a no-op anywhere that is not GCE: the metadata server (metadata.google.internal /
+# 169.254.169.254) does not answer on OpenStack or a laptop, the fetch fails, and the unit
+# exits 0 without touching authorized_keys. Baked (enabled) here, not started, so it runs on
+# each real deploy boot rather than during the compile boot.
+- hosts: "{{ host }}"
+  become: true
+
+  tasks:
+    - name: Install the GCE metadata root-key authorizer
+      ansible.builtin.copy:
+        dest: /usr/local/sbin/mhbench-authorize-root-from-metadata
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # MHBench: authorize the root SSH key published in GCE instance metadata.
+          # No-op off GCE: the metadata server does not answer, the fetch fails, we exit 0.
+          set -eu
+          MD="http://metadata.google.internal/computeMetadata/v1/instance/attributes/ssh-keys"
+          fetch() {
+            if command -v curl >/dev/null 2>&1; then
+              curl -s -f -m 5 -H 'Metadata-Flavor: Google' "$1" 2>/dev/null
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -T 5 --header='Metadata-Flavor: Google' -O - "$1" 2>/dev/null
+            fi
+          }
+          keys="$(fetch "$MD" || true)"
+          [ -n "$keys" ] || exit 0
+          install -d -m 700 /root/.ssh
+          touch /root/.ssh/authorized_keys
+          chmod 600 /root/.ssh/authorized_keys
+          printf '%s\n' "$keys" | while IFS= read -r line; do
+            case "$line" in
+              root:*)
+                k=${line#root:}
+                [ -n "$k" ] || continue
+                grep -qxF "$k" /root/.ssh/authorized_keys 2>/dev/null \
+                  || printf '%s\n' "$k" >> /root/.ssh/authorized_keys
+                ;;
+            esac
+          done
+          exit 0
+
+    - name: Install the boot unit that runs the authorizer before sshd
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/mhbench-authorize-root-from-metadata.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=MHBench: authorize root SSH from GCE instance metadata
+          Wants=network-online.target
+          After=network-online.target
+          Before=ssh.service sshd.service
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/usr/local/sbin/mhbench-authorize-root-from-metadata
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable it at boot (do not start it during the compile boot)
+      ansible.builtin.systemd:
+        name: mhbench-authorize-root-from-metadata.service
+        enabled: true
+        daemon_reload: true

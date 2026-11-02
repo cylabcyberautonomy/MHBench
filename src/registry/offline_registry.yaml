@@ -18,6 +18,7 @@
   playbooks:
   - fix_efi_fstab
   - enable_root_ssh
+  - authorize_root_from_gce_metadata
   - enable_host_logging
   - kali_packages
   disk_size_gb: null
