@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -39,6 +40,21 @@ def _gcp_name(name: str) -> str:
     if not s or not s[0].isalpha():
         s = "m-" + s
     return s[:63].rstrip("-")
+
+
+# VPC ownership lives in the network's description as JSON: networks (unlike instances) have no
+# labels field, and every other resource MHBench creates hangs off its VPC. wipe() reads it back.
+def _owner_stamp(owner: str) -> str:
+    return json.dumps({"mhbench": {"owner": owner}})
+
+
+def _owner_of(network) -> str | None:
+    """The principal that created this MHBench VPC, or None if it carries no valid stamp. Fails
+    toward None, so a hand-edited, legacy or foreign VPC is never treated as yours."""
+    try:
+        return json.loads(network.description or "")["mhbench"]["owner"]
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 class GCPBackend(CloudBackend):
@@ -158,6 +174,7 @@ class GCPBackend(CloudBackend):
         logger.info("Creating VPC network '%s'...", self._net_name())
         self._wait(self._networks.insert(project=self._project, network_resource=c.Network(
             name=self._net_name(),
+            description=_owner_stamp(self._owner()),
             auto_create_subnetworks=False,
             routing_config=c.NetworkRoutingConfig(routing_mode="REGIONAL"),
         )))
@@ -170,6 +187,7 @@ class GCPBackend(CloudBackend):
                 project=self._project, region=self._region,
                 subnetwork_resource=c.Subnetwork(
                     name=self._subnet_name("management"),
+                    description=_owner_stamp(self._owner()),
                     ip_cidr_range=self._management.cidr,
                     network=self._net_url(),
                     region=self._region,
@@ -182,6 +200,7 @@ class GCPBackend(CloudBackend):
                 project=self._project, region=self._region,
                 subnetwork_resource=c.Subnetwork(
                     name=self._subnet_name(subnet.name),
+                    description=_owner_stamp(self._owner()),
                     ip_cidr_range=str(subnet.cidr),
                     network=self._net_url(),
                     region=self._region,
@@ -265,6 +284,7 @@ class GCPBackend(CloudBackend):
                     ))
 
     def _insert_firewall(self, firewall) -> None:
+        firewall.description = _owner_stamp(self._owner())
         logger.info("Creating firewall rule '%s'...", firewall.name)
         self._wait(self._firewalls.insert(project=self._project, firewall_resource=firewall))
 
@@ -293,7 +313,8 @@ class GCPBackend(CloudBackend):
         logger.info("Creating Cloud Router + NAT for private egress...")
         self._wait(self._routers.insert(
             project=self._project, region=self._region,
-            router_resource=c.Router(name=self._n("router"), network=self._net_url(), nats=[nat]),
+            router_resource=c.Router(name=self._n("router"), network=self._net_url(), nats=[nat],
+                                     description=_owner_stamp(self._owner())),
         ))
 
     def teardown_network(self, topology: NetworkTopology) -> None:
@@ -360,6 +381,105 @@ class GCPBackend(CloudBackend):
         except Exception:
             logger.exception("Failed deleting %s (continuing teardown)", label)
 
+    def _delete_many(self, calls: list) -> None:
+        """Submit every (delete_fn, label) at once, then wait for all: GCP runs them concurrently
+        server-side, where one-at-a-time _delete() would take hours for a few hundred VMs."""
+        from google.api_core.exceptions import NotFound  # lazy
+        ops = []
+        for fn, label in calls:
+            try:
+                ops.append((fn(), label))
+            except NotFound:
+                logger.debug("%s already gone", label)
+            except Exception:
+                logger.exception("Failed deleting %s (continuing wipe)", label)
+        for op, label in ops:
+            try:
+                self._wait(op)
+                logger.info("Deleted %s", label)
+            except NotFound:
+                logger.debug("%s already gone", label)
+            except Exception:
+                logger.exception("Failed deleting %s (continuing wipe)", label)
+
+    # -- ownership + wipe ---------------------------------------------------
+
+    def _owner(self) -> str:
+        """The GCP principal this backend acts as: stamped onto every resource it creates, and the only
+        owner wipe() deletes by default. Resolved once — it is read at every create site."""
+        if getattr(self, "_owner_email", None):
+            return self._owner_email
+        email = getattr(self._credentials, "service_account_email", None)
+        if not email:
+            import subprocess  # lazy, as in upload_image
+            # shortcut: assumes ADC and the gcloud CLI are logged in as the same account (true when ADC
+            # came from `gcloud auth application-default login`); read the ADC token's email if they diverge.
+            try:
+                email = subprocess.run(["gcloud", "config", "get-value", "account"],
+                                       capture_output=True, text=True).stdout.strip()
+            except FileNotFoundError:
+                email = ""
+        if not email:
+            raise RuntimeError("Cannot determine the GCP principal: no service-account credentials_file and "
+                               "`gcloud config get-value account` is empty.")
+        self._owner_email = email
+        return email
+
+    def wipe(self, everything: bool = False) -> None:
+        """GCP's clean slate: delete MHBench VPCs and everything attached to them.
+
+        Default: resources whose own stamp names this principal; unstamped ones go if they sit on a VPC
+        stamped as yours. Colleagues' runs in the shared project are untouched (OpenStack's wipe-all
+        would kill them). everything=True drops ownership: every non-default VPC and everything on it,
+        and every instance in the project whatever network it is on."""
+        me = None if everything else self._owner()
+        nets = {n.name for n in self._networks.list(project=self._project)
+                if n.name != "default" and (everything or _owner_of(n) == me)}
+        logger.info("Wiping %d VPC(s)%s: %s", len(nets), "" if everything else f" owned by {me}", sorted(nets))
+
+        def on_target(network_url: str) -> bool:
+            return (network_url or "").rsplit("/", 1)[-1] in nets
+
+        def take(res, network_urls) -> bool:
+            """Its own stamp decides. Unstamped resources (the harness C2, defender decoys, anything from
+            before stamping) fall back to sitting on a target VPC. A resource stamped by someone else is
+            never taken, even inside your VPC — that VPC's delete then fails rather than kill their work."""
+            owner = None if everything else _owner_of(res)
+            if owner is not None:
+                return owner == me
+            return any(on_target(u) for u in network_urls)
+
+        def scope(key: str) -> str:  # "zones/us-central1-a" -> "us-central1-a"
+            return key.rsplit("/", 1)[-1]
+
+        # Dependency order: instances pin subnets; routers, firewalls and subnets pin the network.
+        self._delete_many([
+            (lambda z=scope(z), n=i.name: self._instances.delete(project=self._project, zone=z, instance=n),
+             f"instance {i.name}")
+            for z, scoped in self._instances.aggregated_list(project=self._project)
+            for i in scoped.instances
+            if everything or take(i, [nic.network for nic in i.network_interfaces])
+        ])
+        self._delete_many([
+            (lambda r=scope(r), n=rt.name: self._routers.delete(project=self._project, region=r, router=n),
+             f"router {rt.name}")
+            for r, scoped in self._routers.aggregated_list(project=self._project)
+            for rt in scoped.routers if take(rt, [rt.network])
+        ] + [
+            (lambda n=fw.name: self._firewalls.delete(project=self._project, firewall=n), f"firewall {fw.name}")
+            for fw in self._firewalls.list(project=self._project) if take(fw, [fw.network])
+        ])
+        self._delete_many([
+            (lambda r=scope(r), n=s.name: self._subnetworks.delete(project=self._project, region=r, subnetwork=n),
+             f"subnetwork {s.name}")
+            for r, scoped in self._subnetworks.aggregated_list(project=self._project)
+            for s in scoped.subnetworks if take(s, [s.network])
+        ])
+        self._delete_many([
+            (lambda n=n: self._networks.delete(project=self._project, network=n), f"network {n}")
+            for n in sorted(nets)
+        ])
+
     # -- hosts --------------------------------------------------------------
 
     def _build_instance(self, name: str, host_name: str, vm_type: str, flavor: str,
@@ -397,6 +517,7 @@ class GCPBackend(CloudBackend):
 
         return c.Instance(
             name=name,
+            description=_owner_stamp(self._owner()),
             # clean in-VM hostname (host-N.mhbench.internal), decoupled from the prefixed provider label
             hostname=f"{_gcp_name(host_name)}.mhbench.internal",
             machine_type=self._machine_type_url(flavor),
