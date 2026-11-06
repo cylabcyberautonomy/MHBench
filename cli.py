@@ -320,6 +320,31 @@ def teardown(ctx: click.Context, spec: Path, yes: bool, project_name: str | None
     click.echo("Teardown complete.")
 
 
+@cli.command()
+@click.option("--all", "everything", is_flag=True,
+              help="Wipe EVERY non-default VPC and every instance in the project, not just your own")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def wipe(ctx: click.Context, everything: bool, yes: bool) -> None:
+    """Clean slate (GCP): delete the MHBench VPCs you created and everything on them.
+
+    Ownership is the stamp each VPC gets at creation, so other people's runs in a shared project
+    are left alone. --all ignores ownership.
+    """
+    config = _load_config(ctx.obj["config_path"], ctx.obj["ansible_verbosity"])
+    _require_backend_config(config)
+    if not yes:
+        click.confirm(
+            "This deletes EVERY non-default VPC and EVERY instance in the project, including other "
+            "people's runs. Continue?" if everything else
+            "This deletes every MHBench VPC you created, and everything on it. Continue?",
+            abort=True,
+        )
+    backend = build_backend(config, OnlineRegistryService(config))
+    backend.wipe(everything=everything)
+    click.echo("Wipe complete.")
+
+
 # ---------------------------------------------------------------------------
 # request-ingress  (defender-requested box ingress)
 # ---------------------------------------------------------------------------

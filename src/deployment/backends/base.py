@@ -57,6 +57,11 @@ class CloudBackend(ABC):
         """Delete one existing host."""
         raise NotImplementedError(f"{self.name} backend does not support remove_host")
 
+    def wipe(self, everything: bool = False) -> None:
+        """Clean slate: delete the resources this caller created (everything=True: all of them).
+        Default unsupported — OpenStack's clean slate lives in the arena."""
+        raise NotImplementedError(f"{self.name} backend does not support wipe")
+
     # -- provisioning -------------------------------------------------------
 
     @abstractmethod
